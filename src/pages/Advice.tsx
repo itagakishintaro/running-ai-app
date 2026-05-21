@@ -4,6 +4,7 @@ import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { functions, db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 interface AdviceResult {
   advice: string;
@@ -176,7 +177,7 @@ export function Advice() {
             </p>
           )}
           <div className="prose prose-sm max-w-none prose-headings:font-bold prose-headings:text-gray-800 prose-h2:text-base prose-h3:text-sm prose-h3:text-blue-700 prose-p:text-gray-700 prose-p:leading-relaxed prose-li:text-gray-700 prose-li:leading-relaxed prose-strong:text-gray-900 prose-hr:my-4">
-            <ReactMarkdown>{advice}</ReactMarkdown>
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{advice}</ReactMarkdown>
           </div>
         </div>
       )}
