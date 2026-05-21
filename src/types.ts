@@ -4,11 +4,22 @@ export type TrainingType = "run" | "rest" | "cross";
 
 export interface UserProfile {
   name: string;
-  age: number;
+  birthDate: string; // YYYY-MM-DD
   gender: Gender;
   heightCm: number;
   weightKg: number;
   updatedAt: Date;
+}
+
+export function calcAge(birthDate: string): number {
+  const today = new Date();
+  const birth = new Date(birthDate);
+  let age = today.getFullYear() - birth.getFullYear();
+  const hasBirthdayPassed =
+    today.getMonth() > birth.getMonth() ||
+    (today.getMonth() === birth.getMonth() && today.getDate() >= birth.getDate());
+  if (!hasBirthdayPassed) age--;
+  return age;
 }
 
 export interface Goal {

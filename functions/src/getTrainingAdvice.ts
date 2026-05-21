@@ -17,11 +17,34 @@ function genderLabel(g: string): string {
   return g === "male" ? "男性" : g === "female" ? "女性" : "その他";
 }
 
+function calcAge(birthDate: string): number {
+  const today = new Date();
+  const birth = new Date(birthDate);
+  let age = today.getFullYear() - birth.getFullYear();
+  const hasBirthdayPassed =
+    today.getMonth() > birth.getMonth() ||
+    (today.getMonth() === birth.getMonth() && today.getDate() >= birth.getDate());
+  if (!hasBirthdayPassed) age--;
+  return age;
+}
+
 export const getTrainingAdvice = onCall(
   { secrets: [anthropicApiKey], region: "asia-northeast1" },
   async (request) => {
-    const { userId } = request.data as { userId: string };
+    const { userId, startDate, endDate, restDays, condition } = request.data as {
+      userId: string;
+      startDate?: string;
+      endDate?: string;
+      restDays?: string[];
+      condition?: string;
+    };
     if (!userId) throw new HttpsError("invalid-argument", "userId is required");
+
+    const today = new Date().toISOString().slice(0, 10);
+    const menuStart = startDate ?? today;
+    const menuEndDate = new Date(menuStart);
+    menuEndDate.setDate(menuEndDate.getDate() + 6);
+    const menuEnd = endDate ?? menuEndDate.toISOString().slice(0, 10);
 
     const db = admin.firestore();
 
@@ -67,15 +90,16 @@ export const getTrainingAdvice = onCall(
             .join("\n");
 
     const marathonLabel = goal.marathonType === "full" ? "フルマラソン(42.195km)" : "ハーフマラソン(21.0975km)";
-    const today = new Date().toISOString().slice(0, 10);
     const daysUntilGoal = Math.ceil(
       (new Date(goal.targetDate).getTime() - new Date(today).getTime()) / (1000 * 60 * 60 * 24)
     );
 
+    const age = profile.birthDate ? calcAge(profile.birthDate) : (profile.age ?? "不明");
+
     const userMessage = `
 【ユーザー情報】
 名前: ${profile.name}
-年齢: ${profile.age}歳
+年齢: ${age}歳
 性別: ${genderLabel(profile.gender)}
 身長: ${profile.heightCm}cm
 体重: ${profile.weightKg}kg
@@ -89,8 +113,16 @@ export const getTrainingAdvice = onCall(
 【直近30日のトレーニング履歴】
 ${trainingsSummary}
 
-今週（7日間）の具体的なトレーニングメニューを提案してください。
-各日のメニューに、目的・内容（距離やペースの目安）を含めてください。
+【現在の体調】: ${condition ?? "普通"}
+${condition === "絶好調" ? "体調が絶好調のため、やや強度を上げたメニューにしてください。" : ""}
+${condition === "良い" ? "体調が良いため、標準的なメニューにしてください。" : ""}
+${condition === "普通" ? "体調が普通のため、無理のない標準的なメニューにしてください。" : ""}
+${condition === "悪い" ? "体調が悪いため、負荷を下げた軽めのメニューにしてください。" : ""}
+${condition === "最悪" ? "体調が最悪のため、トレーニング量を大幅に減らし、回復を優先するメニューにしてください。" : ""}
+
+${menuStart}から${menuEnd}までの期間のトレーニングメニューを提案してください。
+各日付を明示した上で、その日のメニューに目的・内容（距離やペースの目安）を含めてください。
+${restDays && restDays.length > 0 ? `【トレーニングできない曜日】: ${restDays.join("・")}曜日はトレーニング不可のため、その日は必ず「休養」としてください。` : ""}
 日本語で答えてください。
 `.trim();
 

@@ -15,7 +15,7 @@ export function useProfile(uid: string | undefined) {
     });
   }, [uid]);
 
-  const saveProfile = async (data: Omit<UserProfile, "updatedAt">) => {
+  const saveProfile = async (data: Omit<UserProfile, "updatedAt" | "age">) => {
     if (!uid) return;
     const payload = { ...data, updatedAt: serverTimestamp() };
     await setDoc(doc(db, "users", uid, "data", "profile"), payload);
