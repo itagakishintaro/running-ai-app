@@ -1,6 +1,27 @@
 export type MarathonType = "full" | "half";
 export type Gender = "male" | "female" | "other";
-export type TrainingType = "run" | "rest" | "cross";
+export type TrainingType =
+  | "jog"       // ジョグ（デフォルト）
+  | "run"       // 汎用ランニング
+  | "long"      // 距離走（LSD）
+  | "pace"      // ペース走
+  | "buildup"   // ビルドアップ走
+  | "tempo"     // テンポ走（閾値走）
+  | "interval"  // インターバルトレーニング
+  | "cross"     // クロストレーニング
+  | "rest";     // 休養
+
+export const TRAINING_TYPE_OPTIONS: { value: TrainingType; label: string; emoji: string; isRest?: boolean }[] = [
+  { value: "jog",      label: "ジョグ",                  emoji: "🐢" },
+  { value: "long",     label: "距離走（LSD）",            emoji: "🏔" },
+  { value: "pace",     label: "ペース走",                 emoji: "⏱" },
+  { value: "buildup",  label: "ビルドアップ走",            emoji: "📈" },
+  { value: "tempo",    label: "テンポ走（閾値走）",         emoji: "🔥" },
+  { value: "interval", label: "インターバルトレーニング",    emoji: "⚡" },
+  { value: "run",      label: "ランニング（その他）",        emoji: "🏃" },
+  { value: "cross",    label: "クロストレーニング",         emoji: "🚴" },
+  { value: "rest",     label: "休養",                     emoji: "😴", isRest: true },
+];
 
 export interface UserProfile {
   name: string;

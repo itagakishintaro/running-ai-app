@@ -78,14 +78,26 @@ export const getTrainingAdvice = onCall(
 
     const trainings = trainingsSnap.docs.map((d) => d.data());
 
+    const typeLabel: Record<string, string> = {
+      jog:      "ジョグ",
+      run:      "ランニング",
+      long:     "距離走（LSD）",
+      pace:     "ペース走",
+      buildup:  "ビルドアップ走",
+      tempo:    "テンポ走（閾値走）",
+      interval: "インターバルトレーニング",
+      cross:    "クロストレーニング",
+      rest:     "休養",
+    };
+
     const trainingsSummary =
       trainings.length === 0
         ? "（まだトレーニング記録がありません）"
         : trainings
             .map((t) => {
+              const label = typeLabel[t.type] ?? t.type;
               if (t.type === "rest") return `${t.date}: 休養`;
-              const typeLabel = t.type === "cross" ? "クロストレーニング" : "ランニング";
-              return `${t.date}: ${typeLabel} ${t.distanceKm}km / ${formatTime(t.durationSec)} / ペース${formatTime(t.avgPaceSecPerKm)}/km${t.notes ? ` / ${t.notes}` : ""}`;
+              return `${t.date}: ${label} ${t.distanceKm}km / ${formatTime(t.durationSec)} / ペース${formatTime(t.avgPaceSecPerKm)}/km${t.notes ? ` / ${t.notes}` : ""}`;
             })
             .join("\n");
 
