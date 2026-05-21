@@ -1,0 +1,26 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+
+# Runtime data
+node_modules/
+dist/
+.firebase/
+.env
+.env.local
+*.local
+
+# Firebase
+.firebaserc.local
+firebase-debug.log
+firebase-debug.*.log
+firestore-debug.log
+ui-debug.log
+
+# Functions build output
+functions/lib/
+functions/node_modules/
+
+# OS
+.DS_Store
