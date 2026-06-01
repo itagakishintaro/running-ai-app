@@ -4,6 +4,8 @@ import { useTrainings } from "../hooks/useTrainings";
 import { httpsCallable } from "firebase/functions";
 import { functions } from "../firebase";
 import { Training, TrainingType, TRAINING_TYPE_OPTIONS, formatTime, parseTimeToSec } from "../types";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 interface ParseResult {
   distanceKm?: number;
@@ -36,6 +38,11 @@ export function TrainingLog() {
   const [imageUploading, setImageUploading] = useState(false);
   const [saving, setSaving] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // 新規登録後の一言アドバイス（モーダル表示）
+  const [showFeedback, setShowFeedback] = useState(false);
+  const [feedbackLoading, setFeedbackLoading] = useState(false);
+  const [feedback, setFeedback] = useState("");
 
   const resetForm = () => {
     setEditingId(null);
@@ -111,11 +118,35 @@ export function TrainingLog() {
 
     if (editingId) {
       await updateTraining(editingId, payload);
+      setSaving(false);
+      closeForm();
     } else {
       await addTraining(payload);
+      setSaving(false);
+      closeForm();
+      // 保存は完了済み。付加機能として一言アドバイスを取得（失敗してもUXを阻害しない）
+      fetchFeedback(payload);
     }
-    setSaving(false);
-    closeForm();
+  };
+
+  const fetchFeedback = async (training: Omit<Training, "id" | "createdAt">) => {
+    if (!user) return;
+    setFeedback("");
+    setFeedbackLoading(true);
+    setShowFeedback(true);
+    try {
+      const fn = httpsCallable<
+        { userId: string; training: Omit<Training, "id" | "createdAt"> },
+        { feedback: string }
+      >(functions, "getTrainingFeedback");
+      const result = await fn({ userId: user.uid, training });
+      setFeedback(result.data.feedback ?? "");
+    } catch (e) {
+      console.error("一言アドバイスの取得に失敗しました", e);
+      setShowFeedback(false); // 失敗時は静かに閉じる（保存は成功済み）
+    } finally {
+      setFeedbackLoading(false);
+    }
   };
 
   return (
@@ -258,6 +289,63 @@ export function TrainingLog() {
           ))}
         </ul>
       )}
+
+      {showFeedback && (
+        <FeedbackModal
+          loading={feedbackLoading}
+          feedback={feedback}
+          onClose={() => setShowFeedback(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+function FeedbackModal({
+  loading,
+  feedback,
+  onClose,
+}: {
+  loading: boolean;
+  feedback: string;
+  onClose: () => void;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-2xl shadow-xl w-full max-w-md p-5"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center gap-2 mb-3">
+          <span className="text-xl">🏃</span>
+          <h3 className="font-bold text-gray-800">コーチからの一言</h3>
+        </div>
+
+        {loading ? (
+          <div className="flex items-center gap-2 text-gray-500 py-6 justify-center">
+            <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+            AIが今回のトレーニングを確認しています...
+          </div>
+        ) : (
+          <div className="prose prose-sm max-w-none prose-p:text-gray-700 prose-p:leading-relaxed prose-strong:text-gray-900">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{feedback}</ReactMarkdown>
+          </div>
+        )}
+
+        <button
+          onClick={onClose}
+          disabled={loading}
+          className="w-full mt-4 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white rounded-lg py-2 text-sm font-semibold transition-colors"
+        >
+          閉じる
+        </button>
+      </div>
     </div>
   );
 }

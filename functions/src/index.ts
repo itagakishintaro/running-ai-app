@@ -4,6 +4,7 @@ import * as admin from "firebase-admin";
 admin.initializeApp();
 
 export { getTrainingAdvice } from "./getTrainingAdvice";
+export { getTrainingFeedback } from "./getTrainingFeedback";
 export { parseTrainingImage } from "./parseTrainingImage";
 
 // ヘルスチェック用
