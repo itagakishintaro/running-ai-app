@@ -7,6 +7,7 @@ import { Profile } from "./pages/Profile";
 import { Goal } from "./pages/Goal";
 import { TrainingLog } from "./pages/TrainingLog";
 import { Advice } from "./pages/Advice";
+import { Review } from "./pages/Review";
 
 function App() {
   const { user, loading } = useAuth();
@@ -30,6 +31,7 @@ function App() {
           <Route path="/goal" element={<Goal />} />
           <Route path="/training" element={<TrainingLog />} />
           <Route path="/advice" element={<Advice />} />
+          <Route path="/review" element={<Review />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Layout>

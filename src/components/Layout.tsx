@@ -8,6 +8,7 @@ const navItems = [
   { path: "/goal", label: "目標", icon: "🎯" },
   { path: "/training", label: "トレーニング", icon: "📋" },
   { path: "/advice", label: "AIアドバイス", icon: "🤖" },
+  { path: "/review", label: "ふりかえり", icon: "📈" },
 ];
 
 export function Layout({ children }: { children: ReactNode }) {
@@ -37,7 +38,7 @@ export function Layout({ children }: { children: ReactNode }) {
             <li key={path}>
               <Link
                 to={path}
-                className={`flex flex-col items-center py-2 px-3 text-xs transition-colors ${
+                className={`flex flex-col items-center py-2 px-2 text-xs transition-colors ${
                   location.pathname === path
                     ? "text-blue-600 font-semibold"
                     : "text-gray-500 hover:text-blue-500"
