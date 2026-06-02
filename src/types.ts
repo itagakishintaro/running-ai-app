@@ -64,6 +64,9 @@ export interface Training {
 }
 
 export function formatTime(totalSec: number): string {
+  // 画像解析等で割り切れない秒数（例: 1867.9000...）が渡ると剰余演算に
+  // 浮動小数点誤差が残るため、先に整数秒へ四捨五入してから分解する。
+  totalSec = Math.round(totalSec);
   const h = Math.floor(totalSec / 3600);
   const m = Math.floor((totalSec % 3600) / 60);
   const s = totalSec % 60;
