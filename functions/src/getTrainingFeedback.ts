@@ -16,6 +16,17 @@ function formatTime(totalSec: number): string {
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
+const WEEKDAYS = ["日", "月", "火", "水", "木", "金", "土"];
+
+// YYYY-MM-DD を暦日付として解釈し「2026-06-01（月）」形式に整形する。
+// T00:00:00Z + getUTCDay() でランタイムのタイムゾーンに依存せず曜日を確定する
+// （getProgressReview.ts の weekStart() と同方式）。曜日をLLMの推測任せにしない。
+function withWeekday(dateStr: string): string {
+  const d = new Date(`${dateStr}T00:00:00Z`);
+  if (isNaN(d.getTime())) return dateStr; // 不正な日付はそのまま返す
+  return `${dateStr}（${WEEKDAYS[d.getUTCDay()]}）`;
+}
+
 const typeLabel: Record<string, string> = {
   jog:      "ジョグ",
   run:      "ランニング",
@@ -65,15 +76,15 @@ export const getTrainingFeedback = onCall(
     if (goal) {
       const marathonLabel =
         goal.marathonType === "full" ? "フルマラソン(42.195km)" : "ハーフマラソン(21.0975km)";
-      goalSummary = `${marathonLabel} / 目標タイム ${formatTime(goal.targetTimeSec)} / 目標日 ${goal.targetDate}`;
+      goalSummary = `${marathonLabel} / 目標タイム ${formatTime(goal.targetTimeSec)} / 目標日 ${withWeekday(goal.targetDate)}`;
     }
 
     // 今回登録したトレーニングの実績
     const label = typeLabel[training.type] ?? training.type;
     const actualSummary =
       training.type === "rest"
-        ? `${training.date}: 休養`
-        : `${training.date}: ${label} ${training.distanceKm}km / ${formatTime(training.durationSec)} / ペース${formatTime(training.avgPaceSecPerKm)}/km${training.notes ? ` / メモ: ${training.notes}` : ""}`;
+        ? `${withWeekday(training.date)}: 休養`
+        : `${withWeekday(training.date)}: ${label} ${training.distanceKm}km / ${formatTime(training.durationSec)} / ペース${formatTime(training.avgPaceSecPerKm)}/km${training.notes ? ` / メモ: ${training.notes}` : ""}`;
 
     const userMessage = `
 ${profile ? `【ランナー】${profile.name}さん` : ""}
