@@ -6,6 +6,7 @@ npm-debug.log*
 # Runtime data
 node_modules/
 dist/
+dev-dist/
 .firebase/
 .env
 .env.local

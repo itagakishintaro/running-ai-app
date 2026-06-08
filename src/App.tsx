@@ -8,6 +8,8 @@ import { Goal } from "./pages/Goal";
 import { TrainingLog } from "./pages/TrainingLog";
 import { Advice } from "./pages/Advice";
 import { Review } from "./pages/Review";
+import { Stats } from "./pages/Stats";
+import { Settings } from "./pages/Settings";
 
 function App() {
   const { user, loading } = useAuth();
@@ -32,6 +34,8 @@ function App() {
           <Route path="/training" element={<TrainingLog />} />
           <Route path="/advice" element={<Advice />} />
           <Route path="/review" element={<Review />} />
+          <Route path="/stats" element={<Stats />} />
+          <Route path="/settings" element={<Settings />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Layout>

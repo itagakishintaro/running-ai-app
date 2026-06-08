@@ -81,6 +81,13 @@ export function Dashboard() {
       </div>
 
       <Link
+        to="/stats"
+        className="block text-center text-sm text-blue-500 hover:underline -mt-2"
+      >
+        過去の月別・週別統計を見る →
+      </Link>
+
+      <Link
         to="/advice"
         className="block w-full bg-blue-600 hover:bg-blue-700 text-white text-center rounded-xl py-4 font-semibold transition-colors shadow"
       >

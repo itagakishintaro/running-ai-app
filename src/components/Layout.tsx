@@ -4,11 +4,10 @@ import { useAuth } from "../hooks/useAuth";
 
 const navItems = [
   { path: "/", label: "ホーム", icon: "🏠" },
-  { path: "/profile", label: "プロフィール", icon: "👤" },
-  { path: "/goal", label: "目標", icon: "🎯" },
   { path: "/training", label: "トレーニング", icon: "📋" },
+  { path: "/stats", label: "統計", icon: "📊" },
   { path: "/advice", label: "AIアドバイス", icon: "🤖" },
-  { path: "/review", label: "ふりかえり", icon: "📈" },
+  { path: "/settings", label: "設定", icon: "⚙️" },
 ];
 
 export function Layout({ children }: { children: ReactNode }) {

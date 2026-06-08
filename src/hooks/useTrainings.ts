@@ -6,7 +6,7 @@ import {
 import { db } from "../firebase";
 import { Training } from "../types";
 
-export function useTrainings(uid: string | undefined) {
+export function useTrainings(uid: string | undefined, limitCount = 90) {
   const [trainings, setTrainings] = useState<Training[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -15,14 +15,14 @@ export function useTrainings(uid: string | undefined) {
     const q = query(
       collection(db, "users", uid, "trainings"),
       orderBy("date", "desc"),
-      limit(90)
+      limit(limitCount)
     );
     const snap = await getDocs(q);
     setTrainings(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Training)));
     setLoading(false);
   };
 
-  useEffect(() => { fetchTrainings(); }, [uid]);
+  useEffect(() => { fetchTrainings(); }, [uid, limitCount]);
 
   const addTraining = async (data: Omit<Training, "id" | "createdAt">) => {
     if (!uid) return;
