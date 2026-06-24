@@ -22,6 +22,7 @@ export function Goal() {
   const { user } = useAuth();
   const { goals, loading, migrating, error, addGoal, updateGoal, deleteGoal } = useGoals(user?.uid);
 
+  const [formOpen, setFormOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<GoalInput>(emptyForm);
   const [currentTimeStr, setCurrentTimeStr] = useState("");
@@ -34,6 +35,7 @@ export function Goal() {
     setForm(emptyForm);
     setCurrentTimeStr("");
     setTargetTimeStr("");
+    setFormOpen(true);
   };
 
   const openEdit = (goal: Goal) => {
@@ -46,6 +48,7 @@ export function Goal() {
     });
     setCurrentTimeStr(formatInputTime(goal.currentTimeSec));
     setTargetTimeStr(formatInputTime(goal.targetTimeSec));
+    setFormOpen(true);
   };
 
   const closeForm = () => {
@@ -53,6 +56,7 @@ export function Goal() {
     setForm(emptyForm);
     setCurrentTimeStr("");
     setTargetTimeStr("");
+    setFormOpen(false);
   };
 
   const handleTimeChange = (value: string, field: "currentTimeSec" | "targetTimeSec") => {
@@ -109,13 +113,13 @@ export function Goal() {
         </div>
       )}
 
-      {goals.length === 0 && !editingId && (
+      {goals.length === 0 && !formOpen && (
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 text-center text-sm text-gray-500">
           目標が登録されていません。右上の「目標を追加」から登録してください。
         </div>
       )}
 
-      {goals.length > 0 && !editingId && (
+      {goals.length > 0 && !formOpen && (
         <ul className="space-y-3">
           {goals.map((goal) => (
             <li
@@ -152,7 +156,7 @@ export function Goal() {
         </ul>
       )}
 
-      {(editingId !== null || goals.length === 0) && (
+      {(formOpen || goals.length === 0) && (
         <form
           onSubmit={handleSubmit}
           className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 space-y-4 mt-4"
@@ -218,7 +222,7 @@ export function Goal() {
             />
           </div>
           <div className="flex gap-3">
-            {editingId && (
+            {goals.length > 0 && (
               <button
                 type="button"
                 onClick={closeForm}
