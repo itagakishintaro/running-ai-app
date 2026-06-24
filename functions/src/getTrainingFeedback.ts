@@ -61,22 +61,26 @@ export const getTrainingFeedback = onCall(
     const db = admin.firestore();
 
     // プロフィール・目標・既存の提案メニューを取得（無くてもエラーにしない）
-    const [profileSnap, goalSnap, adviceSnap] = await Promise.all([
+    const [profileSnap, goalsSnap, adviceSnap] = await Promise.all([
       db.doc(`users/${userId}/data/profile`).get(),
-      db.doc(`users/${userId}/data/goal`).get(),
+      db.collection(`users/${userId}/goals`).orderBy("targetDate", "asc").get(),
       db.doc(`users/${userId}/data/advice`).get(),
     ]);
 
     const profile = profileSnap.exists ? profileSnap.data()! : null;
-    const goal = goalSnap.exists ? goalSnap.data()! : null;
+    const goals = goalsSnap.docs.map((d) => d.data());
     const proposedMenu = adviceSnap.exists ? (adviceSnap.data()!.advice as string) : "";
 
     // 目標情報（あれば）
     let goalSummary = "（目標未設定）";
-    if (goal) {
-      const marathonLabel =
-        goal.marathonType === "full" ? "フルマラソン(42.195km)" : "ハーフマラソン(21.0975km)";
-      goalSummary = `${marathonLabel} / 目標タイム ${formatTime(goal.targetTimeSec)} / 目標日 ${withWeekday(goal.targetDate)}`;
+    if (goals.length > 0) {
+      goalSummary = goals
+        .map((g) => {
+          const marathonLabel =
+            g.marathonType === "full" ? "フルマラソン(42.195km)" : "ハーフマラソン(21.0975km)";
+          return `- ${marathonLabel} / 目標タイム ${formatTime(g.targetTimeSec)} / 目標日 ${withWeekday(g.targetDate)}`;
+        })
+        .join("\n");
     }
 
     // 今回登録したトレーニングの実績

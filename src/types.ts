@@ -44,11 +44,26 @@ export function calcAge(birthDate: string): number {
 }
 
 export interface Goal {
+  id: string;
   marathonType: MarathonType;
   currentTimeSec: number;
   targetTimeSec: number;
   targetDate: string; // YYYY-MM-DD
   updatedAt: Date;
+}
+
+export type GoalInput = Omit<Goal, "id" | "updatedAt">;
+
+export function sortGoalsByTargetDate(goals: Goal[]): Goal[] {
+  return [...goals].sort((a, b) => a.targetDate.localeCompare(b.targetDate));
+}
+
+export function getNearestGoal(goals: Goal[]): Goal | undefined {
+  const today = new Date().toISOString().slice(0, 10);
+  const future = goals.filter((g) => g.targetDate >= today);
+  if (future.length > 0) return sortGoalsByTargetDate(future)[0];
+  const sorted = sortGoalsByTargetDate(goals);
+  return sorted[sorted.length - 1];
 }
 
 export interface Training {

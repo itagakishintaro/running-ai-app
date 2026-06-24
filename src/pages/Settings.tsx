@@ -11,7 +11,7 @@ const settingsItems = [
     to: "/goal",
     icon: "🎯",
     label: "目標設定",
-    description: "マラソンの目標タイムと目標日",
+    description: "マラソンの目標タイムと目標日の一覧管理",
   },
   {
     to: "/review",

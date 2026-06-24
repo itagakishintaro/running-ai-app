@@ -87,12 +87,14 @@ export const getProgressReview = onCall(
     const db = admin.firestore();
 
     // プロフィールと目標を取得
-    const [profileSnap, goalSnap] = await Promise.all([
+    const [profileSnap, goalsSnap] = await Promise.all([
       db.doc(`users/${userId}/data/profile`).get(),
-      db.doc(`users/${userId}/data/goal`).get(),
+      db.collection(`users/${userId}/goals`).orderBy("targetDate", "asc").get(),
     ]);
 
-    if (!profileSnap.exists || !goalSnap.exists) {
+    const goals = goalsSnap.docs.map((d) => d.data());
+
+    if (!profileSnap.exists || goals.length === 0) {
       throw new HttpsError(
         "failed-precondition",
         "プロフィールと目標を先に登録してください"
@@ -100,22 +102,24 @@ export const getProgressReview = onCall(
     }
 
     const profile = profileSnap.data()!;
-    const goal = goalSnap.data()!;
 
     const today = new Date().toISOString().slice(0, 10);
 
-    // レビュー期間: 目標設定時〜現在をベースに、最大52週（364日）で上限
+    // レビュー期間: 最も古い目標の設定時〜現在をベースに、最大52週（364日）で上限
     const oneYearAgo = new Date();
     oneYearAgo.setDate(oneYearAgo.getDate() - 364);
     const oneYearAgoStr = oneYearAgo.toISOString().slice(0, 10);
 
-    const goalSetDate: string =
-      goal.updatedAt && typeof goal.updatedAt.toDate === "function"
-        ? goal.updatedAt.toDate().toISOString().slice(0, 10)
-        : oneYearAgoStr;
+    const oldestGoalSetDate: string = goals.reduce((min: string, g) => {
+      const d =
+        g.updatedAt && typeof g.updatedAt.toDate === "function"
+          ? g.updatedAt.toDate().toISOString().slice(0, 10)
+          : oneYearAgoStr;
+      return d < min ? d : min;
+    }, oneYearAgoStr);
 
     // 文字列比較（YYYY-MM-DD は辞書順＝時系列順）で max を取る
-    const windowStart = goalSetDate > oneYearAgoStr ? goalSetDate : oneYearAgoStr;
+    const windowStart = oldestGoalSetDate > oneYearAgoStr ? oldestGoalSetDate : oneYearAgoStr;
 
     const trainingsSnap = await db
       .collection(`users/${userId}/trainings`)
@@ -216,14 +220,19 @@ export const getProgressReview = onCall(
             .join("\n");
 
     // ---- 目標・期間情報 ----
-    const marathonLabel =
-      goal.marathonType === "full" ? "フルマラソン(42.195km)" : "ハーフマラソン(21.0975km)";
-    const daysUntilGoal = Math.ceil(
-      (new Date(goal.targetDate).getTime() - new Date(today).getTime()) / (1000 * 60 * 60 * 24)
-    );
     const daysElapsed = Math.ceil(
       (new Date(today).getTime() - new Date(windowStart).getTime()) / (1000 * 60 * 60 * 24)
     );
+
+    const goalLines = goals
+      .map((g) => {
+        const marathonLabel = g.marathonType === "full" ? "フルマラソン(42.195km)" : "ハーフマラソン(21.0975km)";
+        const daysUntilGoal = Math.ceil(
+          (new Date(g.targetDate).getTime() - new Date(today).getTime()) / (1000 * 60 * 60 * 24)
+        );
+        return `- 種目: ${marathonLabel}\n  現在のタイム: ${formatTime(g.currentTimeSec)}\n  目標タイム: ${formatTime(g.targetTimeSec)}\n  目標日: ${g.targetDate}（本日から${daysUntilGoal}日後）`;
+      })
+      .join("\n");
 
     const age = profile.birthDate ? calcAge(profile.birthDate) : (profile.age ?? "不明");
 
@@ -245,10 +254,7 @@ export const getProgressReview = onCall(
 体重: ${profile.weightKg}kg
 
 【目標】
-種目: ${marathonLabel}
-現在のタイム: ${formatTime(goal.currentTimeSec)}
-目標タイム: ${formatTime(goal.targetTimeSec)}
-目標日: ${goal.targetDate}（本日から${daysUntilGoal}日後）
+${goalLines}
 
 【ふりかえり対象期間】
 ${windowStart} 〜 ${today}（約${daysElapsed}日間）

@@ -73,12 +73,14 @@ export const getTrainingAdvice = onCall(
     const db = admin.firestore();
 
     // プロフィールと目標を取得
-    const [profileSnap, goalSnap] = await Promise.all([
+    const [profileSnap, goalsSnap] = await Promise.all([
       db.doc(`users/${userId}/data/profile`).get(),
-      db.doc(`users/${userId}/data/goal`).get(),
+      db.collection(`users/${userId}/goals`).orderBy("targetDate", "asc").get(),
     ]);
 
-    if (!profileSnap.exists || !goalSnap.exists) {
+    const goals = goalsSnap.docs.map((d) => d.data());
+
+    if (!profileSnap.exists || goals.length === 0) {
       throw new HttpsError(
         "failed-precondition",
         "プロフィールと目標を先に登録してください"
@@ -86,7 +88,6 @@ export const getTrainingAdvice = onCall(
     }
 
     const profile = profileSnap.data()!;
-    const goal = goalSnap.data()!;
 
     // 直近30日のトレーニングを取得
     const thirtyDaysAgo = new Date();
@@ -125,10 +126,15 @@ export const getTrainingAdvice = onCall(
             })
             .join("\n");
 
-    const marathonLabel = goal.marathonType === "full" ? "フルマラソン(42.195km)" : "ハーフマラソン(21.0975km)";
-    const daysUntilGoal = Math.ceil(
-      (new Date(goal.targetDate).getTime() - new Date(today).getTime()) / (1000 * 60 * 60 * 24)
-    );
+    const goalLines = goals
+      .map((g) => {
+        const marathonLabel = g.marathonType === "full" ? "フルマラソン(42.195km)" : "ハーフマラソン(21.0975km)";
+        const daysUntilGoal = Math.ceil(
+          (new Date(g.targetDate).getTime() - new Date(today).getTime()) / (1000 * 60 * 60 * 24)
+        );
+        return `- 種目: ${marathonLabel}\n  現在のタイム: ${formatTime(g.currentTimeSec)}\n  目標タイム: ${formatTime(g.targetTimeSec)}\n  目標日: ${withWeekday(g.targetDate)}（本日から${daysUntilGoal}日後）`;
+      })
+      .join("\n");
 
     const age = profile.birthDate ? calcAge(profile.birthDate) : (profile.age ?? "不明");
 
@@ -141,10 +147,7 @@ export const getTrainingAdvice = onCall(
 体重: ${profile.weightKg}kg
 
 【目標】
-種目: ${marathonLabel}
-現在のタイム: ${formatTime(goal.currentTimeSec)}
-目標タイム: ${formatTime(goal.targetTimeSec)}
-目標日: ${withWeekday(goal.targetDate)}（本日から${daysUntilGoal}日後）
+${goalLines}
 
 【直近30日のトレーニング履歴】
 ${trainingsSummary}
