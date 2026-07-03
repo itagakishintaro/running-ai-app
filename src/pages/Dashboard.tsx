@@ -95,6 +95,13 @@ export function Dashboard() {
         🤖 AIにトレーニングメニューを提案してもらう
       </Link>
 
+      <Link
+        to="/races"
+        className="block w-full bg-emerald-600 hover:bg-emerald-700 text-white text-center rounded-xl py-4 font-semibold transition-colors shadow"
+      >
+        🏅 出場するマラソン大会を探す
+      </Link>
+
       {recentTrainings.length > 0 && (
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
           <p className="text-sm font-semibold text-gray-700 mb-3">直近のトレーニング</p>

@@ -7,6 +7,7 @@ import { Profile } from "./pages/Profile";
 import { Goal } from "./pages/Goal";
 import { TrainingLog } from "./pages/TrainingLog";
 import { Advice } from "./pages/Advice";
+import { Races } from "./pages/Races";
 import { Review } from "./pages/Review";
 import { Stats } from "./pages/Stats";
 import { Settings } from "./pages/Settings";
@@ -33,6 +34,7 @@ function App() {
           <Route path="/goal" element={<Goal />} />
           <Route path="/training" element={<TrainingLog />} />
           <Route path="/advice" element={<Advice />} />
+          <Route path="/races" element={<Races />} />
           <Route path="/review" element={<Review />} />
           <Route path="/stats" element={<Stats />} />
           <Route path="/settings" element={<Settings />} />
