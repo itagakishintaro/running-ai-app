@@ -25,6 +25,8 @@ export function Races() {
   const { profile } = useProfile(user?.uid);
   const [mode, setMode] = useState<RaceMode>("training");
   const [freeRequest, setFreeRequest] = useState("");
+  const [periodFrom, setPeriodFrom] = useState(""); // YYYY-MM
+  const [periodTo, setPeriodTo] = useState("");
   const [recommendation, setRecommendation] = useState("");
   const [generatedAt, setGeneratedAt] = useState<Date | null>(null);
   const [loading, setLoading] = useState(false);
@@ -41,6 +43,8 @@ export function Races() {
         setGeneratedAt(data.generatedAt?.toDate() ?? null);
         if (data.mode === "training" || data.mode === "travel") setMode(data.mode);
         setFreeRequest(data.freeRequest ?? "");
+        setPeriodFrom(data.periodFrom ?? "");
+        setPeriodTo(data.periodTo ?? "");
       }
       setInitialLoading(false);
     });
@@ -55,13 +59,15 @@ export function Races() {
     setNeedsPrefecture(false);
     try {
       const fn = httpsCallable<
-        { userId: string; mode: RaceMode; freeRequest?: string },
+        { userId: string; mode: RaceMode; freeRequest?: string; periodFrom?: string; periodTo?: string },
         RaceResult
       >(functions, "getRaceRecommendations", { timeout: 180_000 });
       const result = await fn({
         userId: user.uid,
         mode,
         freeRequest: mode === "travel" ? freeRequest : undefined,
+        periodFrom: periodFrom || undefined,
+        periodTo: periodTo || undefined,
       });
       const newRecommendation = result.data.recommendation;
       setRecommendation(newRecommendation);
@@ -70,6 +76,8 @@ export function Races() {
         recommendation: newRecommendation,
         mode,
         freeRequest: mode === "travel" ? freeRequest : "",
+        periodFrom,
+        periodTo,
         generatedAt: serverTimestamp(),
       });
     } catch (e) {
@@ -114,6 +122,30 @@ export function Races() {
               </button>
             ))}
           </div>
+        </div>
+
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">対象時期（任意）</label>
+          <div className="flex items-center gap-2">
+            <input
+              type="month"
+              value={periodFrom}
+              onChange={(e) => setPeriodFrom(e.target.value)}
+              max={periodTo || undefined}
+              className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+            />
+            <span className="text-gray-400 text-sm">〜</span>
+            <input
+              type="month"
+              value={periodTo}
+              onChange={(e) => setPeriodTo(e.target.value)}
+              min={periodFrom || undefined}
+              className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+            />
+          </div>
+          <p className="text-xs text-gray-500 mt-1">
+            未指定なら目標日に合わせて提案します。期間を指定すると、その期間内で時期が偏らないように提案します
+          </p>
         </div>
 
         {(prefectureMissing || needsPrefecture) && (

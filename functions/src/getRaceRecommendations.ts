@@ -53,16 +53,25 @@ export const getRaceRecommendations = onCall(
     timeoutSeconds: 120,
   },
   async (request) => {
-    const { userId, mode, freeRequest } = request.data as {
+    const { userId, mode, freeRequest, periodFrom, periodTo } = request.data as {
       userId: string;
       mode: "training" | "travel";
       freeRequest?: string;
+      periodFrom?: string; // YYYY-MM。指定した月以降の大会に絞る
+      periodTo?: string;   // YYYY-MM。指定した月末までの大会に絞る
     };
     if (!userId) throw new HttpsError("invalid-argument", "userId is required");
     if (mode !== "training" && mode !== "travel") {
       throw new HttpsError("invalid-argument", "mode must be 'training' or 'travel'");
     }
     const trimmedRequest = (freeRequest ?? "").trim().slice(0, 500);
+
+    const monthRe = /^\d{4}-\d{2}$/;
+    const validFrom = periodFrom && monthRe.test(periodFrom) ? periodFrom : null;
+    const validTo = periodTo && monthRe.test(periodTo) ? periodTo : null;
+    if (validFrom && validTo && validFrom > validTo) {
+      throw new HttpsError("invalid-argument", "対象時期の開始月が終了月より後になっています");
+    }
 
     const db = admin.firestore();
 
@@ -93,10 +102,18 @@ export const getRaceRecommendations = onCall(
 
     const today = new Date().toISOString().slice(0, 10);
 
+    // 対象時期: 開始は「指定月の1日と本日の遅い方」、終了は指定月の末日（未指定なら制限なし）
+    const rangeStart = validFrom && `${validFrom}-01` > today ? `${validFrom}-01` : today;
+    let rangeEnd: string | null = null;
+    if (validTo) {
+      const [y, m] = validTo.split("-").map(Number);
+      rangeEnd = new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10); // 月末日
+    }
+
     // ---- 収集済みの大会DBから候補を絞り込む ----
     const racesSnap = await db
       .collection("races")
-      .where("date", ">=", today)
+      .where("date", ">=", rangeStart)
       .orderBy("date", "asc")
       .limit(2000)
       .get();
@@ -106,6 +123,7 @@ export const getRaceRecommendations = onCall(
     const candidates = racesSnap.docs
       .map((d) => d.data())
       .filter((r) => {
+        if (rangeEnd && r.date > rangeEnd) return false;
         if (targetPrefs && !targetPrefs.has(r.prefecture)) return false;
         // 締切が判明していて既に過ぎているものは除外（不明なものは残して要確認扱い）
         if (r.entryEnd && r.entryEnd < today) return false;
@@ -122,7 +140,9 @@ export const getRaceRecommendations = onCall(
       throw new HttpsError(
         "failed-precondition",
         lastRunAt
-          ? "条件に合う大会データが見つかりませんでした。旅RUNモードもお試しください"
+          ? (validFrom || validTo
+              ? "指定した時期に合う大会が見つかりませんでした。対象時期を広げてお試しください"
+              : "条件に合う大会データが見つかりませんでした。旅RUNモードもお試しください")
           : "大会データがまだ収集されていません。しばらくしてからお試しください"
       );
     }
@@ -180,6 +200,11 @@ export const getRaceRecommendations = onCall(
 ${goalLines}
 
 ${modeInstruction}
+
+【対象時期】
+${validFrom || validTo
+  ? `ユーザーは ${validFrom ?? "現在"} 〜 ${validTo ?? "指定なし"} の時期の大会を希望しています。この場合は目標日との近さよりも指定時期内での適合を優先し、期間が複数月にわたるときは開催月が偏らないよう分散して提案してください（毎月レースに出たいというニーズにも応えられるように）。`
+  : "時期の指定はありません。目標日から逆算して最適なタイミングの大会を提案してください。"}
 
 【候補大会リスト（当アプリが収集した大会DBより。データ取得日: ${lastRunAt ? lastRunAt.toISOString().slice(0, 10) : "不明"}）】
 ${candidateLines}
