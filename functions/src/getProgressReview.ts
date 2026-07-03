@@ -105,30 +105,23 @@ export const getProgressReview = onCall(
 
     const today = new Date().toISOString().slice(0, 10);
 
-    // レビュー期間: 最も古い目標の設定時〜現在をベースに、最大52週（364日）で上限
+    // 取得範囲: 最大52週（364日）まで遡る
     const oneYearAgo = new Date();
     oneYearAgo.setDate(oneYearAgo.getDate() - 364);
     const oneYearAgoStr = oneYearAgo.toISOString().slice(0, 10);
 
-    const oldestGoalSetDate: string = goals.reduce((min: string, g) => {
-      const d =
-        g.updatedAt && typeof g.updatedAt.toDate === "function"
-          ? g.updatedAt.toDate().toISOString().slice(0, 10)
-          : oneYearAgoStr;
-      return d < min ? d : min;
-    }, oneYearAgoStr);
-
-    // 文字列比較（YYYY-MM-DD は辞書順＝時系列順）で max を取る
-    const windowStart = oldestGoalSetDate > oneYearAgoStr ? oldestGoalSetDate : oneYearAgoStr;
-
     const trainingsSnap = await db
       .collection(`users/${userId}/trainings`)
-      .where("date", ">=", windowStart)
+      .where("date", ">=", oneYearAgoStr)
       .orderBy("date", "asc")
       .limit(400)
       .get();
 
     const trainings = trainingsSnap.docs.map((d) => d.data() as Training);
+
+    // ふりかえり対象期間の起点は「最初の記録日」。
+    // 記録開始から日が浅いのに1年間で平均や年間換算をされないようにする。
+    const windowStart = trainings.length > 0 ? trainings[0].date : oneYearAgoStr;
 
     // ---- 集計 ----
     let totalDistance = 0;
@@ -194,7 +187,9 @@ export const getProgressReview = onCall(
 
     const overallSummary = [
       `総走行距離: ${Math.round(totalDistance * 10) / 10}km`,
-      `総トレーニング回数: ${totalRuns}回（休養 ${totalRest}日）`,
+      `総トレーニング回数: ${totalRuns}回${
+        totalRest > 0 ? `（休養の記録 ${totalRest}日）` : ""
+      }`,
       `種別内訳: ${typeBreakdown || "なし"}`,
     ].join("\n");
 
@@ -257,7 +252,7 @@ export const getProgressReview = onCall(
 ${goalLines}
 
 【ふりかえり対象期間】
-${windowStart} 〜 ${today}（約${daysElapsed}日間）
+${windowStart} 〜 ${today}（約${daysElapsed}日間 ※最初の記録日から起算）
 
 【全期間サマリ】
 ${overallSummary}
@@ -285,7 +280,10 @@ ${subjectiveSummary}
         "## 進捗チェック\n目標タイムと目標日までの残り日数に対して、現在のトレーニング量・ペース・自己ベストが順調かどうかを、具体的な数値（必要な改善幅やペースの目安）を交えて評価する。\n" +
         "## ふりかえり\nこの期間にできていること（継続・成長している点）と、課題・気になる点を挙げる。本人の主観報告（体調・故障・モチベーション）も必ず踏まえる。\n" +
         "## 今後のアドバイス\n残り期間にどう取り組むべきか、方針を具体的に示す。故障や体調不良の申告があれば回復を優先するなど、主観報告を反映する。\n" +
-        "科学的根拠に基づき、励ましつつも率直に。日本語で、読みやすいMarkdownで答えてください。",
+        "科学的根拠に基づき、励ましつつも率直に。日本語で、読みやすいMarkdownで答えてください。\n" +
+        "注意事項:\n" +
+        "- 記録があるのはトレーニングを行った日のみ。記録のない日は休養日と考えられるため、休養の記録がない・少ないことを「休養を取っていない」と解釈しないこと。\n" +
+        "- 走行距離の平均や換算（週平均・月間など）は、ふりかえり対象期間の実際の長さに基づいて計算すること。対象期間より長い期間（年間など）への換算はしないこと。",
       messages: [{ role: "user", content: userMessage }],
     });
 
