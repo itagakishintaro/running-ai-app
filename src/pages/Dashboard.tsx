@@ -3,7 +3,7 @@ import { useAuth } from "../hooks/useAuth";
 import { useProfile } from "../hooks/useProfile";
 import { useGoals } from "../hooks/useGoals";
 import { useTrainings } from "../hooks/useTrainings";
-import { formatTime, getNearestGoal } from "../types";
+import { formatTime, getNearestGoal, isTrailGoal } from "../types";
 
 export function Dashboard() {
   const { user } = useAuth();
@@ -50,17 +50,41 @@ export function Dashboard() {
       {nearestGoal && (
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
           <p className="text-xs text-gray-500 font-medium mb-1">現在の目標</p>
-          <p className="font-bold text-gray-800">
-            {nearestGoal.marathonType === "full" ? "フルマラソン" : "ハーフマラソン"}
-          </p>
-          <div className="flex gap-4 mt-2 text-sm text-gray-600">
-            <span>現在: {formatTime(nearestGoal.currentTimeSec)}</span>
-            <span>→</span>
-            <span className="font-semibold text-blue-600">
-              目標: {formatTime(nearestGoal.targetTimeSec)}
-            </span>
-            <span className="text-gray-400">({nearestGoal.targetDate}まで)</span>
-          </div>
+          {isTrailGoal(nearestGoal) ? (
+            <>
+              <p className="font-bold text-gray-800">
+                ⛰️ {nearestGoal.raceName || "トレイルラン"}
+              </p>
+              <div className="flex gap-4 mt-2 text-sm text-gray-600 flex-wrap">
+                <span>
+                  {nearestGoal.distanceKm}km
+                  {nearestGoal.elevationGainM
+                    ? ` / D+${nearestGoal.elevationGainM.toLocaleString()}m`
+                    : ""}
+                </span>
+                <span className="font-semibold text-blue-600">
+                  {nearestGoal.trailTargetType === "time" && nearestGoal.targetTimeSec
+                    ? `目標: ${formatTime(nearestGoal.targetTimeSec)}`
+                    : "目標: 完走"}
+                </span>
+                <span className="text-gray-400">({nearestGoal.targetDate}まで)</span>
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="font-bold text-gray-800">
+                {nearestGoal.marathonType === "full" ? "フルマラソン" : "ハーフマラソン"}
+              </p>
+              <div className="flex gap-4 mt-2 text-sm text-gray-600">
+                <span>現在: {formatTime(nearestGoal.currentTimeSec ?? 0)}</span>
+                <span>→</span>
+                <span className="font-semibold text-blue-600">
+                  目標: {formatTime(nearestGoal.targetTimeSec ?? 0)}
+                </span>
+                <span className="text-gray-400">({nearestGoal.targetDate}まで)</span>
+              </div>
+            </>
+          )}
         </div>
       )}
 

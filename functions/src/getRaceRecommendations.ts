@@ -3,19 +3,9 @@ import { defineSecret } from "firebase-functions/params";
 import * as admin from "firebase-admin";
 import Anthropic from "@anthropic-ai/sdk";
 import { nearbyPrefectures } from "./races/prefectures";
+import { describeGoal, GoalDoc } from "./goalLabel";
 
 const anthropicApiKey = defineSecret("ANTHROPIC_API_KEY");
-
-function formatTime(totalSec: number): string {
-  // 画像解析等で割り切れない秒数が渡ると剰余演算に浮動小数点誤差が残るため、
-  // 先に整数秒へ四捨五入してから分解する。
-  totalSec = Math.round(totalSec);
-  const h = Math.floor(totalSec / 3600);
-  const m = Math.floor((totalSec % 3600) / 60);
-  const s = totalSec % 60;
-  if (h > 0) return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
-  return `${m}:${String(s).padStart(2, "0")}`;
-}
 
 function genderLabel(g: string): string {
   return g === "male" ? "男性" : g === "female" ? "女性" : "その他";
@@ -46,6 +36,17 @@ const TYPE_LABEL: Record<string, string> = {
 // プロンプトに載せる候補大会数の上限（多すぎると選定精度と速度が落ちる）
 const MAX_CANDIDATES = 80;
 
+// トレランの難易度基準: 距離に対する累積標高の割合（5%前後が中程度）
+const TRAIL_DIFFICULTY = {
+  easy:     { label: "やさしめ", ratio: 0.035 },
+  moderate: { label: "中程度",   ratio: 0.05 },
+  hard:     { label: "ハード",   ratio: 0.065 },
+} as const;
+type TrailDifficulty = keyof typeof TRAIL_DIFFICULTY;
+
+// ロード種目（トレラン専業大会の判定に使う）
+const ROAD_TYPES = ["full", "half", "10k", "ultra"];
+
 export const getRaceRecommendations = onCall(
   {
     secrets: [anthropicApiKey],
@@ -53,18 +54,34 @@ export const getRaceRecommendations = onCall(
     timeoutSeconds: 120,
   },
   async (request) => {
-    const { userId, mode, freeRequest, periodFrom, periodTo } = request.data as {
-      userId: string;
-      mode: "training" | "travel";
-      freeRequest?: string;
-      periodFrom?: string; // YYYY-MM。指定した月以降の大会に絞る
-      periodTo?: string;   // YYYY-MM。指定した月末までの大会に絞る
-    };
+    const { userId, mode, freeRequest, periodFrom, periodTo, raceType, trailDistanceKm, trailDifficulty } =
+      request.data as {
+        userId: string;
+        mode: "training" | "travel";
+        freeRequest?: string;
+        periodFrom?: string; // YYYY-MM。指定した月以降の大会に絞る
+        periodTo?: string;   // YYYY-MM。指定した月末までの大会に絞る
+        raceType?: "marathon" | "trail"; // 未指定は marathon（旧クライアント互換）
+        trailDistanceKm?: number;        // trail時必須
+        trailDifficulty?: TrailDifficulty;
+      };
     if (!userId) throw new HttpsError("invalid-argument", "userId is required");
     if (mode !== "training" && mode !== "travel") {
       throw new HttpsError("invalid-argument", "mode must be 'training' or 'travel'");
     }
     const trimmedRequest = (freeRequest ?? "").trim().slice(0, 500);
+
+    const isTrail = raceType === "trail";
+    let trailKm = 0;
+    let difficulty: (typeof TRAIL_DIFFICULTY)[TrailDifficulty] | null = null;
+    if (isTrail) {
+      if (typeof trailDistanceKm !== "number" || !isFinite(trailDistanceKm) || trailDistanceKm <= 0) {
+        throw new HttpsError("invalid-argument", "トレイルランでは希望距離(km)を指定してください");
+      }
+      trailKm = Math.min(Math.max(trailDistanceKm, 3), 330);
+      difficulty = TRAIL_DIFFICULTY[trailDifficulty && trailDifficulty in TRAIL_DIFFICULTY ? trailDifficulty : "moderate"];
+    }
+    const targetElevationM = difficulty ? Math.round(trailKm * 1000 * difficulty.ratio) : 0;
 
     const monthRe = /^\d{4}-\d{2}$/;
     const validFrom = periodFrom && monthRe.test(periodFrom) ? periodFrom : null;
@@ -127,6 +144,16 @@ export const getRaceRecommendations = onCall(
         if (targetPrefs && !targetPrefs.has(r.prefecture)) return false;
         // 締切が判明していて既に過ぎているものは除外（不明なものは残して要確認扱い）
         if (r.entryEnd && r.entryEnd < today) return false;
+        if (isTrail) {
+          if (!r.types?.includes("trail")) return false;
+          // 距離の緩い事前フィルタ（距離不明は残して要確認扱い。厳密なマッチはLLMに任せる）
+          if (r.distancesKm?.length && !r.distancesKm.some((d: number) => d >= trailKm * 0.6 && d <= trailKm * 1.5)) {
+            return false;
+          }
+        } else {
+          // トレラン専業大会を除外（ロード種目を併催しない大会が候補80枠を埋めるのを防ぐ）
+          if (r.types?.includes("trail") && !r.types.some((t: string) => ROAD_TYPES.includes(t))) return false;
+        }
         return true;
       })
       .slice(0, MAX_CANDIDATES);
@@ -155,6 +182,8 @@ export const getRaceRecommendations = onCall(
             ? `エントリー期間: ${r.entryStart ?? "?"} 〜 ${r.entryEnd ?? "?"}`
             : "エントリー期間: 不明";
         const extras = [
+          r.distancesKm?.length ? `距離: ${r.distancesKm.join("/")}km` : "",
+          isTrail ? `累積標高: ${r.elevationGainM ? `${r.elevationGainM}m` : "不明"}` : "",
           r.timeLimit ? `制限時間: ${r.timeLimit}` : "",
           r.certified === true ? "公認" : "",
           r.url ? `URL: ${r.url}` : "",
@@ -166,11 +195,10 @@ export const getRaceRecommendations = onCall(
     // ---- ユーザー情報 ----
     const goalLines = goals
       .map((g) => {
-        const marathonLabel = g.marathonType === "full" ? "フルマラソン(42.195km)" : "ハーフマラソン(21.0975km)";
         const daysUntilGoal = Math.ceil(
           (new Date(g.targetDate).getTime() - new Date(today).getTime()) / (1000 * 60 * 60 * 24)
         );
-        return `- 種目: ${marathonLabel}\n  現在のタイム: ${formatTime(g.currentTimeSec)}\n  目標タイム: ${formatTime(g.targetTimeSec)}\n  目標日: ${g.targetDate}（本日から${daysUntilGoal}日後）`;
+        return `- ${describeGoal(g as GoalDoc)}\n  目標日: ${g.targetDate}（本日から${daysUntilGoal}日後）`;
       })
       .join("\n");
 
@@ -200,7 +228,14 @@ export const getRaceRecommendations = onCall(
 ${goalLines}
 
 ${modeInstruction}
-
+${isTrail && difficulty ? `
+【トレイルラン条件】
+希望距離: 約${trailKm}km / 希望難易度: ${difficulty.label}（累積標高の目安: 約${targetElevationM}m）
+難易度の基準（距離に対する累積標高の割合）: 3.5%未満=やさしめ / 5%前後=中程度 / 6.5%超=ハード
+- 各候補は距離カテゴリのうち希望距離に近いものを対象に評価すること。
+- 累積標高が「不明」の大会を提案する場合は「累積標高は公式サイトで要確認」と必ず明記すること。
+- マラソン目標に向けた脚づくり・走力面での効果にも一言触れること。
+` : ""}
 【対象時期】
 ${validFrom || validTo
   ? `ユーザーは ${validFrom ?? "現在"} 〜 ${validTo ?? "指定なし"} の時期の大会を希望しています。この場合は目標日との近さよりも指定時期内での適合を優先し、期間が複数月にわたるときは開催月が偏らないよう分散して提案してください（毎月レースに出たいというニーズにも応えられるように）。`
@@ -212,7 +247,7 @@ ${candidateLines}
 上記の候補大会リストの中から、ユーザーに最適な大会を3件選んで提案してください。
 `.trim();
 
-    const system = `あなたは経験豊富なランニングコーチ兼、マラソン大会のコンシェルジュです。
+    const system = `あなたは経験豊富なランニングコーチ兼、マラソン・トレイルラン大会のコンシェルジュです。
 提供された候補大会リストの中から、ユーザーの目標・走力・希望に最適な大会を3件選んで提案します。
 
 必ず守るルール:
@@ -226,6 +261,7 @@ ${candidateLines}
 - ユーザーの現在のタイムに対して制限時間が現実的かを確認すること（制限時間不明なら要確認と書く）。
 - 出力は日本語のMarkdown。大会ごとに見出し（##）を立て、以下を含めること:
   開催日 / 開催地 / 種目 / エントリー期間（残り日数も） / 制限時間 / おすすめ理由（現在タイム・目標タイム・目標日との整合） / URL（リストにあれば）
+- トレイルランの場合は距離カテゴリと累積標高も含めること（累積標高が不明なら「公式サイトで要確認」と明記）。
 - 各大会の説明は要点を簡潔に。冗長な前置きやまとめは不要。
 - 最後に「エントリー情報は変わることがあるため、申込前に必ず公式ページで最新情報をご確認ください」と添えること。`;
 

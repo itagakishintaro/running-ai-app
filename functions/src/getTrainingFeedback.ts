@@ -2,6 +2,7 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { defineSecret } from "firebase-functions/params";
 import * as admin from "firebase-admin";
 import Anthropic from "@anthropic-ai/sdk";
+import { describeGoal, GoalDoc } from "./goalLabel";
 
 const anthropicApiKey = defineSecret("ANTHROPIC_API_KEY");
 
@@ -35,6 +36,7 @@ const typeLabel: Record<string, string> = {
   buildup:  "ビルドアップ走",
   tempo:    "テンポ走（閾値走）",
   interval: "インターバルトレーニング",
+  trail:    "トレイルラン",
   cross:    "クロストレーニング",
   rest:     "休養",
 };
@@ -45,6 +47,7 @@ interface FeedbackTraining {
   distanceKm: number;
   durationSec: number;
   avgPaceSecPerKm: number;
+  elevationGainM?: number | null;
   notes: string;
 }
 
@@ -75,11 +78,7 @@ export const getTrainingFeedback = onCall(
     let goalSummary = "（目標未設定）";
     if (goals.length > 0) {
       goalSummary = goals
-        .map((g) => {
-          const marathonLabel =
-            g.marathonType === "full" ? "フルマラソン(42.195km)" : "ハーフマラソン(21.0975km)";
-          return `- ${marathonLabel} / 目標タイム ${formatTime(g.targetTimeSec)} / 目標日 ${withWeekday(g.targetDate)}`;
-        })
+        .map((g) => `- ${describeGoal(g as GoalDoc)}\n  目標日: ${withWeekday(g.targetDate)}`)
         .join("\n");
     }
 
@@ -88,7 +87,7 @@ export const getTrainingFeedback = onCall(
     const actualSummary =
       training.type === "rest"
         ? `${withWeekday(training.date)}: 休養`
-        : `${withWeekday(training.date)}: ${label} ${training.distanceKm}km / ${formatTime(training.durationSec)} / ペース${formatTime(training.avgPaceSecPerKm)}/km${training.notes ? ` / メモ: ${training.notes}` : ""}`;
+        : `${withWeekday(training.date)}: ${label} ${training.distanceKm}km / ${formatTime(training.durationSec)} / ペース${formatTime(training.avgPaceSecPerKm)}/km${training.elevationGainM ? ` / 累積標高${training.elevationGainM}m` : ""}${training.notes ? ` / メモ: ${training.notes}` : ""}`;
 
     const userMessage = `
 ${profile ? `【ランナー】${profile.name}さん` : ""}

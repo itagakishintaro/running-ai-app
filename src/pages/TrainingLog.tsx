@@ -11,6 +11,7 @@ interface ParseResult {
   distanceKm?: number;
   durationSec?: number;
   avgPaceSecPerKm?: number;
+  elevationGainM?: number;
   notes?: string;
 }
 
@@ -34,6 +35,7 @@ export function TrainingLog() {
   const [distance, setDistance] = useState("");
   const [duration, setDuration] = useState("");
   const [pace, setPace] = useState("");
+  const [elevationGain, setElevationGain] = useState("");
   const [notes, setNotes] = useState("");
   const [imageUploading, setImageUploading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -51,6 +53,7 @@ export function TrainingLog() {
     setDistance("");
     setDuration("");
     setPace("");
+    setElevationGain("");
     setNotes("");
   };
 
@@ -66,6 +69,7 @@ export function TrainingLog() {
     setDistance(t.distanceKm ? String(t.distanceKm) : "");
     setDuration(t.durationSec ? formatTime(t.durationSec) : "");
     setPace(t.avgPaceSecPerKm ? formatTime(t.avgPaceSecPerKm) : "");
+    setElevationGain(t.elevationGainM ? String(t.elevationGainM) : "");
     setNotes(t.notes ?? "");
     setShowForm(true);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -91,6 +95,7 @@ export function TrainingLog() {
         if (data.distanceKm) setDistance(String(data.distanceKm));
         if (data.durationSec) setDuration(formatTime(data.durationSec));
         if (data.avgPaceSecPerKm) setPace(formatTime(data.avgPaceSecPerKm));
+        if (data.elevationGainM) setElevationGain(String(data.elevationGainM));
         if (data.notes) setNotes(data.notes);
       };
       reader.readAsDataURL(file);
@@ -114,7 +119,15 @@ export function TrainingLog() {
       ? Math.round(durationSec / distanceKm)
       : 0;
 
-    const payload = { date, type, distanceKm, durationSec, avgPaceSecPerKm: paceSecPerKm, notes };
+    const payload = {
+      date,
+      type,
+      distanceKm,
+      durationSec,
+      avgPaceSecPerKm: paceSecPerKm,
+      elevationGainM: type === "trail" && elevationGain ? Number(elevationGain) : null,
+      notes,
+    };
 
     if (editingId) {
       await updateTraining(editingId, payload);
@@ -250,6 +263,19 @@ export function TrainingLog() {
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
                 />
               </div>
+              {type === "trail" && (
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">累積標高 (m)</label>
+                  <input
+                    type="number"
+                    value={elevationGain}
+                    onChange={(e) => setElevationGain(e.target.value)}
+                    min="0"
+                    placeholder="850"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  />
+                </div>
+              )}
             </>
           )}
 
@@ -374,6 +400,7 @@ function TrainingCard({
               <span>{t.distanceKm} km</span>
               <span>{formatTime(t.durationSec)}</span>
               <span className="text-gray-400">{formatTime(t.avgPaceSecPerKm)}/km</span>
+              {t.elevationGainM ? <span>↗ {t.elevationGainM}m</span> : null}
             </div>
           )}
           {t.notes && <p className="text-xs text-gray-400 mt-1 break-words">{t.notes}</p>}

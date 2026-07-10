@@ -12,6 +12,8 @@ export interface ExtractedRace {
   timeLimit: string | null;   // 制限時間（例: "6時間"）
   certified: boolean | null;  // 陸連公認かどうか
   url: string | null;         // 大会詳細ページURL
+  distancesKm: number[] | null;  // 開催距離カテゴリ(km)。降順。距離不明はnull
+  elevationGainM: number | null; // 累積標高D+(m)。掲載があるときのみ（最長距離カテゴリの値）
 }
 
 // Firestore races/{raceId} に保存するドキュメント

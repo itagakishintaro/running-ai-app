@@ -6,9 +6,10 @@ import { PREFECTURES } from "./prefectures";
 import { sportsentry } from "./sources/sportsentry";
 import { runnetRuntes } from "./sources/runnetRuntes";
 import { runnersBible } from "./sources/runnersBible";
+import { trailrunnerJp } from "./sources/trailrunnerJp";
 
 // ソース追加はモジュールを書いてこの配列に足すだけ
-const SOURCES: RaceSource[] = [sportsentry, runnetRuntes, runnersBible];
+const SOURCES: RaceSource[] = [sportsentry, runnetRuntes, runnersBible, trailrunnerJp];
 
 // 1ソース内で同時に処理するURLグループ数（取得先サイトへの負荷配慮）
 const GROUP_CONCURRENCY = 3;
@@ -71,7 +72,7 @@ function htmlToText(html: string, baseUrl: string): string {
 }
 
 function extractionPrompt(hint: string, pageText: string): string {
-  return `以下はマラソン大会一覧ページのテキストです。掲載されている大会をすべてJSON配列として抽出してください。
+  return `以下はマラソン・トレイルランニング等のランニング大会一覧ページのテキストです。掲載されている大会をすべてJSON配列として抽出してください。
 
 ソースに関する補足: ${hint}
 
@@ -86,7 +87,9 @@ function extractionPrompt(hint: string, pageText: string): string {
   "entryEnd": "エントリー締切日 YYYY-MM-DD またはnull",
   "timeLimit": "制限時間の記載（例: 6時間）またはnull",
   "certified": 公認大会の記載があればtrue、非公認と明記ならfalse、不明ならnull,
-  "url": "大会名の近くにある (LINK:...) のURL。なければnull"
+  "url": "大会名の近くにある (LINK:...) のURL。なければnull",
+  "distancesKm": [開催距離カテゴリ（km単位の数値）の配列。例:【50k･32k･18k】→ [50, 32, 18]、「約27k」→ 27。距離が数値で明記されていなければnull（「フル」「ハーフ」からの換算は不要）],
+  "elevationGainM": 累積標高（「D+」「累積標高」等）がm単位で明記されていれば数値（複数距離がある場合は最長距離のもの）。なければnull
 }
 
 ルール:
@@ -119,6 +122,13 @@ function parseExtracted(raw: string): ExtractedRace[] {
     const name = typeof o.name === "string" ? o.name.trim() : "";
     if (!name) continue;
     const asDate = (v: unknown) => (typeof v === "string" && dateRe.test(v) ? v : null);
+    const distances = Array.isArray(o.distancesKm)
+      ? o.distancesKm
+          .filter((n): n is number => typeof n === "number" && isFinite(n) && n > 0 && n < 400)
+          .map((n) => Math.round(n * 10) / 10)
+          .sort((a, b) => b - a)
+          .slice(0, 10)
+      : [];
     results.push({
       name,
       date: asDate(o.date),
@@ -130,6 +140,11 @@ function parseExtracted(raw: string): ExtractedRace[] {
       timeLimit: typeof o.timeLimit === "string" && o.timeLimit ? o.timeLimit : null,
       certified: typeof o.certified === "boolean" ? o.certified : null,
       url: typeof o.url === "string" && o.url.startsWith("http") ? o.url : null,
+      distancesKm: distances.length > 0 ? distances : null,
+      elevationGainM:
+        typeof o.elevationGainM === "number" && isFinite(o.elevationGainM) && o.elevationGainM > 0 && o.elevationGainM < 20000
+          ? Math.round(o.elevationGainM)
+          : null,
     });
   }
   return results;
@@ -174,7 +189,9 @@ async function extractFromText(
   for (const chunk of chunkText(text)) {
     const response = await client.messages.create({
       model: EXTRACTION_MODEL,
-      max_tokens: 8192,
+      // スキーマにdistancesKm/elevationGainMを追加して1大会あたりの出力が伸びたため、
+      // 大会密度の高いチャンクで途切れ→パース失敗0件にならないよう余裕を持たせる
+      max_tokens: 16384,
       messages: [{ role: "user", content: extractionPrompt(source.extractionHint, chunk) }],
     });
     const raw = response.content[0]?.type === "text" ? response.content[0].text : "";
@@ -197,7 +214,7 @@ async function extractViaFetchTool(
   const attempt = async (model: string, toolType: string) => {
     const response = await client.messages.create({
       model,
-      max_tokens: 8192,
+      max_tokens: 16384,
       tools: [{ type: toolType, name: "web_fetch", max_uses: 2 } as unknown as Anthropic.Messages.ToolUnion],
       messages: [{ role: "user", content: prompt }],
     });
@@ -322,6 +339,8 @@ export async function collectRaces(apiKey: string): Promise<CollectionSummary> {
                   timeLimit: pick("timeLimit") as string | null,
                   certified: pick("certified") as boolean | null,
                   url: pick("url") as string | null,
+                  distancesKm: pick("distancesKm") as number[] | null,
+                  elevationGainM: pick("elevationGainM") as number | null,
                 };
                 existing.priority = Math.max(existing.priority, source.fieldPriority);
               }

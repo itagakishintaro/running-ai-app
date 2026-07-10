@@ -13,6 +13,7 @@ interface ParseResult {
   distanceKm?: number;
   durationSec?: number;
   avgPaceSecPerKm?: number;
+  elevationGainM?: number;
   notes?: string;
 }
 
@@ -61,6 +62,7 @@ export const parseTrainingImage = onCall(
   "distanceKm": 数値（km）,
   "duration": "HH:MM:SS または MM:SS",
   "avgPace": "MM:SS（1kmあたりのペース）",
+  "elevationGainM": 数値（累積標高・獲得標高・上昇量・Total Ascent などの表示があればm単位。なければnull）,
   "notes": "その他の特記事項（心拍数など）"
 }
 
@@ -72,7 +74,7 @@ JSONのみを返してください。説明文は不要です。`,
     });
 
     const text = response.content[0].type === "text" ? response.content[0].text.trim() : "{}";
-    let parsed: { distanceKm?: number; duration?: string; avgPace?: string; notes?: string } = {};
+    let parsed: { distanceKm?: number; duration?: string; avgPace?: string; elevationGainM?: number; notes?: string } = {};
 
     try {
       const jsonMatch = text.match(/\{[\s\S]*\}/);
@@ -85,6 +87,7 @@ JSONのみを返してください。説明文は不要です。`,
       distanceKm: parsed.distanceKm ?? undefined,
       durationSec: parsed.duration ? parseTimeToSec(parsed.duration) : undefined,
       avgPaceSecPerKm: parsed.avgPace ? parseTimeToSec(parsed.avgPace) : undefined,
+      elevationGainM: typeof parsed.elevationGainM === "number" ? parsed.elevationGainM : undefined,
       notes: parsed.notes ?? undefined,
     };
 

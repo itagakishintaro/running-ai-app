@@ -8,6 +8,7 @@ export type TrainingType =
   | "buildup"   // ビルドアップ走
   | "tempo"     // テンポ走（閾値走）
   | "interval"  // インターバルトレーニング
+  | "trail"     // トレイルランニング
   | "cross"     // クロストレーニング
   | "rest";     // 休養
 
@@ -19,6 +20,7 @@ export const TRAINING_TYPE_OPTIONS: { value: TrainingType; label: string; emoji:
   { value: "tempo",    label: "テンポ走（閾値走）",         emoji: "🔥" },
   { value: "interval", label: "インターバルトレーニング",    emoji: "⚡" },
   { value: "run",      label: "ランニング（その他）",        emoji: "🏃" },
+  { value: "trail",    label: "トレイルラン",              emoji: "⛰️" },
   { value: "cross",    label: "クロストレーニング",         emoji: "🚴" },
   { value: "rest",     label: "休養",                     emoji: "😴", isRest: true },
 ];
@@ -56,13 +58,29 @@ export function calcAge(birthDate: string): number {
   return age;
 }
 
+export type GoalType = "marathon" | "trail";
+// トレラン目標の型: タイムが大会をまたいで比較できないため、完走（関門内）が基本
+export type TrailTargetType = "finish" | "time";
+
 export interface Goal {
   id: string;
-  marathonType: MarathonType;
-  currentTimeSec: number;
-  targetTimeSec: number;
-  targetDate: string; // YYYY-MM-DD
+  goalType?: GoalType; // 既存ドキュメントは未設定＝マラソン扱い
+  // マラソン目標（goalTypeがtrailのときはnull）
+  marathonType?: MarathonType | null;
+  currentTimeSec?: number | null;
+  // マラソンは必須。トレランは目標タイム型のみ使用
+  targetTimeSec?: number | null;
+  targetDate: string; // YYYY-MM-DD（トレランは大会開催日）
+  // トレラン目標（goalTypeがmarathonのときはnull）
+  raceName?: string | null;
+  distanceKm?: number | null;
+  elevationGainM?: number | null;
+  trailTargetType?: TrailTargetType | null;
   updatedAt: Date;
+}
+
+export function isTrailGoal(g: Goal): boolean {
+  return g.goalType === "trail";
 }
 
 export type GoalInput = Omit<Goal, "id" | "updatedAt">;
@@ -86,6 +104,9 @@ export interface Training {
   distanceKm: number;
   durationSec: number;
   avgPaceSecPerKm: number;
+  // 累積標高(m)。トレランのみ。他種別へ編集で変えたときはnull上書きで無効化する
+  // （updateTrainingはPartial<Training>をそのまま渡す作りでdeleteFieldを使えないため）
+  elevationGainM?: number | null;
   notes: string;
   imageUrl?: string;
   createdAt: Date;

@@ -1,20 +1,25 @@
 import { useState } from "react";
 import { useAuth } from "../hooks/useAuth";
 import { useGoals } from "../hooks/useGoals";
-import { MarathonType, type Goal, GoalInput, parseTimeToSec, formatTime } from "../types";
+import {
+  MarathonType,
+  GoalType,
+  TrailTargetType,
+  type Goal,
+  GoalInput,
+  isTrailGoal,
+  parseTimeToSec,
+  formatTime,
+} from "../types";
 
-const emptyForm: GoalInput = {
-  marathonType: "full",
-  currentTimeSec: 0,
-  targetTimeSec: 0,
-  targetDate: "",
-};
-
-function formatInputTime(totalSec: number): string {
-  return totalSec > 0 ? formatTime(totalSec) : "";
+function formatInputTime(totalSec: number | null | undefined): string {
+  return totalSec && totalSec > 0 ? formatTime(totalSec) : "";
 }
 
 function goalLabel(goal: Goal): string {
+  if (isTrailGoal(goal)) {
+    return `⛰️ ${goal.raceName || "トレイルラン"} ${goal.targetDate}まで`;
+  }
   return `${goal.marathonType === "full" ? "フルマラソン" : "ハーフマラソン"} ${goal.targetDate}まで`;
 }
 
@@ -24,56 +29,100 @@ export function Goal() {
 
   const [formOpen, setFormOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState<GoalInput>(emptyForm);
+  const [goalType, setGoalType] = useState<GoalType>("marathon");
+  const [marathonType, setMarathonType] = useState<MarathonType>("full");
   const [currentTimeStr, setCurrentTimeStr] = useState("");
   const [targetTimeStr, setTargetTimeStr] = useState("");
+  const [targetDate, setTargetDate] = useState("");
+  const [raceName, setRaceName] = useState("");
+  const [distanceStr, setDistanceStr] = useState("");
+  const [elevationStr, setElevationStr] = useState("");
+  const [trailTargetType, setTrailTargetType] = useState<TrailTargetType>("finish");
   const [saving, setSaving] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Goal | null>(null);
 
-  const openAdd = () => {
+  const resetForm = () => {
     setEditingId(null);
-    setForm(emptyForm);
+    setGoalType("marathon");
+    setMarathonType("full");
     setCurrentTimeStr("");
     setTargetTimeStr("");
+    setTargetDate("");
+    setRaceName("");
+    setDistanceStr("");
+    setElevationStr("");
+    setTrailTargetType("finish");
+  };
+
+  const openAdd = () => {
+    resetForm();
     setFormOpen(true);
   };
 
   const openEdit = (goal: Goal) => {
+    resetForm();
     setEditingId(goal.id);
-    setForm({
-      marathonType: goal.marathonType,
-      currentTimeSec: goal.currentTimeSec,
-      targetTimeSec: goal.targetTimeSec,
-      targetDate: goal.targetDate,
-    });
+    setGoalType(isTrailGoal(goal) ? "trail" : "marathon");
+    setMarathonType(goal.marathonType ?? "full");
     setCurrentTimeStr(formatInputTime(goal.currentTimeSec));
     setTargetTimeStr(formatInputTime(goal.targetTimeSec));
+    setTargetDate(goal.targetDate);
+    setRaceName(goal.raceName ?? "");
+    setDistanceStr(goal.distanceKm ? String(goal.distanceKm) : "");
+    setElevationStr(goal.elevationGainM ? String(goal.elevationGainM) : "");
+    setTrailTargetType(goal.trailTargetType ?? "finish");
     setFormOpen(true);
   };
 
   const closeForm = () => {
-    setEditingId(null);
-    setForm(emptyForm);
-    setCurrentTimeStr("");
-    setTargetTimeStr("");
+    resetForm();
     setFormOpen(false);
-  };
-
-  const handleTimeChange = (value: string, field: "currentTimeSec" | "targetTimeSec") => {
-    if (field === "currentTimeSec") setCurrentTimeStr(value);
-    else setTargetTimeStr(value);
-    setForm((prev) => ({ ...prev, [field]: parseTimeToSec(value) }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (form.currentTimeSec <= 0 || form.targetTimeSec <= 0 || !form.targetDate) return;
+    if (!targetDate) return;
+
+    let payload: GoalInput;
+    if (goalType === "trail") {
+      const distanceKm = Number(distanceStr);
+      const targetTimeSec = parseTimeToSec(targetTimeStr);
+      if (!(distanceKm > 0)) return;
+      if (trailTargetType === "time" && targetTimeSec <= 0) return;
+      payload = {
+        goalType: "trail",
+        marathonType: null,
+        currentTimeSec: null,
+        targetTimeSec: trailTargetType === "time" ? targetTimeSec : null,
+        targetDate,
+        raceName: raceName.trim() || null,
+        distanceKm,
+        elevationGainM: elevationStr ? Number(elevationStr) : null,
+        trailTargetType,
+      };
+    } else {
+      const currentTimeSec = parseTimeToSec(currentTimeStr);
+      const targetTimeSec = parseTimeToSec(targetTimeStr);
+      if (currentTimeSec <= 0 || targetTimeSec <= 0) return;
+      payload = {
+        goalType: "marathon",
+        marathonType,
+        currentTimeSec,
+        targetTimeSec,
+        targetDate,
+        raceName: null,
+        distanceKm: null,
+        elevationGainM: null,
+        trailTargetType: null,
+      };
+    }
+
     setSaving(true);
     try {
       if (editingId) {
-        await updateGoal(editingId, form);
+        await updateGoal(editingId, payload);
       } else {
-        await addGoal(form);
+        await addGoal(payload);
       }
       closeForm();
     } finally {
@@ -129,12 +178,24 @@ export function Goal() {
               <div className="flex items-start justify-between">
                 <div>
                   <p className="font-bold text-gray-800">{goalLabel(goal)}</p>
-                  <p className="text-sm text-gray-600 mt-1">
-                    現在: {formatTime(goal.currentTimeSec)} →{" "}
-                    <span className="font-semibold text-blue-600">
-                      目標: {formatTime(goal.targetTimeSec)}
-                    </span>
-                  </p>
+                  {isTrailGoal(goal) ? (
+                    <p className="text-sm text-gray-600 mt-1">
+                      {goal.distanceKm}km
+                      {goal.elevationGainM ? ` / D+${goal.elevationGainM.toLocaleString()}m` : ""} →{" "}
+                      <span className="font-semibold text-blue-600">
+                        {goal.trailTargetType === "time" && goal.targetTimeSec
+                          ? `目標: ${formatTime(goal.targetTimeSec)}`
+                          : "目標: 完走（関門内）"}
+                      </span>
+                    </p>
+                  ) : (
+                    <p className="text-sm text-gray-600 mt-1">
+                      現在: {formatTime(goal.currentTimeSec ?? 0)} →{" "}
+                      <span className="font-semibold text-blue-600">
+                        目標: {formatTime(goal.targetTimeSec ?? 0)}
+                      </span>
+                    </p>
+                  )}
                 </div>
                 <div className="flex gap-2">
                   <button
@@ -167,56 +228,164 @@ export function Goal() {
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">種目</label>
             <div className="flex gap-3">
-              {(["full", "half"] as MarathonType[]).map((type) => (
-                <button
-                  key={type}
-                  type="button"
-                  onClick={() => setForm((prev) => ({ ...prev, marathonType: type }))}
-                  className={`flex-1 py-2 rounded-lg border text-sm font-medium transition-colors ${
-                    form.marathonType === type
-                      ? "bg-blue-600 text-white border-blue-600"
-                      : "bg-white text-gray-700 border-gray-300 hover:border-blue-400"
-                  }`}
-                >
-                  {type === "full" ? "フルマラソン" : "ハーフマラソン"}
-                </button>
-              ))}
+              {(
+                [
+                  { goalType: "marathon", marathonType: "full", label: "フルマラソン" },
+                  { goalType: "marathon", marathonType: "half", label: "ハーフマラソン" },
+                  { goalType: "trail", marathonType: null, label: "⛰️ トレイルラン" },
+                ] as const
+              ).map((opt) => {
+                const selected =
+                  goalType === opt.goalType &&
+                  (opt.goalType === "trail" || marathonType === opt.marathonType);
+                return (
+                  <button
+                    key={opt.label}
+                    type="button"
+                    onClick={() => {
+                      setGoalType(opt.goalType);
+                      if (opt.marathonType) setMarathonType(opt.marathonType);
+                    }}
+                    className={`flex-1 py-2 rounded-lg border text-sm font-medium transition-colors ${
+                      selected
+                        ? "bg-blue-600 text-white border-blue-600"
+                        : "bg-white text-gray-700 border-gray-300 hover:border-blue-400"
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                );
+              })}
             </div>
           </div>
+
+          {goalType === "trail" ? (
+            <>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  大会名 <span className="text-gray-400 font-normal">(任意)</span>
+                </label>
+                <input
+                  type="text"
+                  value={raceName}
+                  onChange={(e) => setRaceName(e.target.value)}
+                  placeholder="例: ハセツネCUP"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                />
+              </div>
+              <div className="flex gap-3">
+                <div className="flex-1">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">距離 (km)</label>
+                  <input
+                    type="number"
+                    value={distanceStr}
+                    onChange={(e) => setDistanceStr(e.target.value)}
+                    min="1"
+                    step="0.1"
+                    required
+                    placeholder="30"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  />
+                </div>
+                <div className="flex-1">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    累積標高 (m) <span className="text-gray-400 font-normal">(任意)</span>
+                  </label>
+                  <input
+                    type="number"
+                    value={elevationStr}
+                    onChange={(e) => setElevationStr(e.target.value)}
+                    min="0"
+                    placeholder="1500"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">目標</label>
+                <div className="flex gap-3">
+                  {(
+                    [
+                      { value: "finish", label: "完走（関門内）" },
+                      { value: "time", label: "目標タイム" },
+                    ] as const
+                  ).map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => setTrailTargetType(opt.value)}
+                      className={`flex-1 py-2 rounded-lg border text-sm font-medium transition-colors ${
+                        trailTargetType === opt.value
+                          ? "bg-blue-600 text-white border-blue-600"
+                          : "bg-white text-gray-700 border-gray-300 hover:border-blue-400"
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs text-gray-500 mt-2">
+                  トレランはコースごとに条件が違うため、初挑戦の大会は「完走」目標がおすすめです
+                </p>
+              </div>
+              {trailTargetType === "time" && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    目標タイム{" "}
+                    <span className="text-gray-400 font-normal">(H:MM:SS)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={targetTimeStr}
+                    onChange={(e) => setTargetTimeStr(e.target.value)}
+                    placeholder="5:30:00"
+                    required
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  />
+                </div>
+              )}
+            </>
+          ) : (
+            <>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  現在のタイム{" "}
+                  <span className="text-gray-400 font-normal">(H:MM:SS または MM:SS)</span>
+                </label>
+                <input
+                  type="text"
+                  value={currentTimeStr}
+                  onChange={(e) => setCurrentTimeStr(e.target.value)}
+                  placeholder={marathonType === "full" ? "4:30:00" : "2:10:00"}
+                  required
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  目標タイム{" "}
+                  <span className="text-gray-400 font-normal">(H:MM:SS または MM:SS)</span>
+                </label>
+                <input
+                  type="text"
+                  value={targetTimeStr}
+                  onChange={(e) => setTargetTimeStr(e.target.value)}
+                  placeholder={marathonType === "full" ? "3:30:00" : "1:45:00"}
+                  required
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                />
+              </div>
+            </>
+          )}
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              現在のタイム{" "}
-              <span className="text-gray-400 font-normal">(H:MM:SS または MM:SS)</span>
+              {goalType === "trail" ? "大会開催日（目標日）" : "目標達成時期"}
             </label>
-            <input
-              type="text"
-              value={currentTimeStr}
-              onChange={(e) => handleTimeChange(e.target.value, "currentTimeSec")}
-              placeholder={form.marathonType === "full" ? "4:30:00" : "2:10:00"}
-              required
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              目標タイム{" "}
-              <span className="text-gray-400 font-normal">(H:MM:SS または MM:SS)</span>
-            </label>
-            <input
-              type="text"
-              value={targetTimeStr}
-              onChange={(e) => handleTimeChange(e.target.value, "targetTimeSec")}
-              placeholder={form.marathonType === "full" ? "3:30:00" : "1:45:00"}
-              required
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">目標達成時期</label>
             <input
               type="date"
-              value={form.targetDate}
-              onChange={(e) => setForm((prev) => ({ ...prev, targetDate: e.target.value }))}
+              value={targetDate}
+              onChange={(e) => setTargetDate(e.target.value)}
               required
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
             />

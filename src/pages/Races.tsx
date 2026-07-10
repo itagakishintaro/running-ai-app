@@ -9,6 +9,8 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 type RaceMode = "training" | "travel";
+type RaceType = "marathon" | "trail";
+type TrailDifficulty = "easy" | "moderate" | "hard";
 
 interface RaceResult {
   recommendation: string;
@@ -20,10 +22,25 @@ const MODE_OPTIONS: { value: RaceMode; emoji: string; label: string; description
   { value: "travel", emoji: "🧳", label: "旅RUN", description: "旅行を兼ねて楽しむ大会を探す" },
 ];
 
+const RACE_TYPE_OPTIONS: { value: RaceType; emoji: string; label: string; description: string }[] = [
+  { value: "marathon", emoji: "🏃", label: "マラソン", description: "ロードのフル・ハーフなど" },
+  { value: "trail", emoji: "⛰️", label: "トレイルラン", description: "山岳・トレイルの大会" },
+];
+
+// 表示専用の難易度係数（条件の正はFunctions側のTRAIL_DIFFICULTYが持つ）
+const DIFFICULTY_OPTIONS: { value: TrailDifficulty; label: string; ratio: number }[] = [
+  { value: "easy",     label: "やさしめ", ratio: 0.035 },
+  { value: "moderate", label: "中程度",   ratio: 0.05 },
+  { value: "hard",     label: "ハード",   ratio: 0.065 },
+];
+
 export function Races() {
   const { user } = useAuth();
   const { profile } = useProfile(user?.uid);
   const [mode, setMode] = useState<RaceMode>("training");
+  const [raceType, setRaceType] = useState<RaceType>("marathon");
+  const [trailDistance, setTrailDistance] = useState("");
+  const [trailDifficulty, setTrailDifficulty] = useState<TrailDifficulty>("moderate");
   const [freeRequest, setFreeRequest] = useState("");
   const [periodFrom, setPeriodFrom] = useState(""); // YYYY-MM
   const [periodTo, setPeriodTo] = useState("");
@@ -42,6 +59,14 @@ export function Races() {
         setRecommendation(data.recommendation ?? "");
         setGeneratedAt(data.generatedAt?.toDate() ?? null);
         if (data.mode === "training" || data.mode === "travel") setMode(data.mode);
+        // raceTypeフィールドのない既存ドキュメントはマラソン扱いのまま
+        if (data.raceType === "trail") {
+          setRaceType("trail");
+          if (data.trailDistanceKm) setTrailDistance(String(data.trailDistanceKm));
+          if (data.trailDifficulty === "easy" || data.trailDifficulty === "moderate" || data.trailDifficulty === "hard") {
+            setTrailDifficulty(data.trailDifficulty);
+          }
+        }
         setFreeRequest(data.freeRequest ?? "");
         setPeriodFrom(data.periodFrom ?? "");
         setPeriodTo(data.periodTo ?? "");
@@ -51,6 +76,9 @@ export function Races() {
   }, [user]);
 
   const prefectureMissing = mode === "training" && !profile?.prefecture;
+  const trailDistanceMissing = raceType === "trail" && !(Number(trailDistance) > 0);
+  const difficultyRatio = DIFFICULTY_OPTIONS.find((o) => o.value === trailDifficulty)?.ratio ?? 0.05;
+  const targetElevationM = Number(trailDistance) > 0 ? Math.round(Number(trailDistance) * 1000 * difficultyRatio) : 0;
 
   const getRecommendations = async () => {
     if (!user) return;
@@ -59,7 +87,16 @@ export function Races() {
     setNeedsPrefecture(false);
     try {
       const fn = httpsCallable<
-        { userId: string; mode: RaceMode; freeRequest?: string; periodFrom?: string; periodTo?: string },
+        {
+          userId: string;
+          mode: RaceMode;
+          freeRequest?: string;
+          periodFrom?: string;
+          periodTo?: string;
+          raceType: RaceType;
+          trailDistanceKm?: number;
+          trailDifficulty?: TrailDifficulty;
+        },
         RaceResult
       >(functions, "getRaceRecommendations", { timeout: 180_000 });
       const result = await fn({
@@ -68,6 +105,9 @@ export function Races() {
         freeRequest: mode === "travel" ? freeRequest : undefined,
         periodFrom: periodFrom || undefined,
         periodTo: periodTo || undefined,
+        raceType,
+        trailDistanceKm: raceType === "trail" ? Number(trailDistance) : undefined,
+        trailDifficulty: raceType === "trail" ? trailDifficulty : undefined,
       });
       const newRecommendation = result.data.recommendation;
       setRecommendation(newRecommendation);
@@ -78,6 +118,9 @@ export function Races() {
         freeRequest: mode === "travel" ? freeRequest : "",
         periodFrom,
         periodTo,
+        raceType,
+        trailDistanceKm: raceType === "trail" ? Number(trailDistance) : null,
+        trailDifficulty: raceType === "trail" ? trailDifficulty : null,
         generatedAt: serverTimestamp(),
       });
     } catch (e) {
@@ -97,12 +140,76 @@ export function Races() {
 
   return (
     <div>
-      <h2 className="text-xl font-bold text-gray-800 mb-2">マラソン大会レコメンド</h2>
+      <h2 className="text-xl font-bold text-gray-800 mb-2">大会レコメンド</h2>
       <p className="text-sm text-gray-500 mb-5">
         あなたの目標と現在のタイムをもとに、収集済みの全国大会データベースから出場すべき大会を提案します。エントリー期間もチェックします。
       </p>
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 mb-4 space-y-4">
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-2">種目を選ぶ</label>
+          <div className="grid grid-cols-2 gap-3">
+            {RACE_TYPE_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => setRaceType(opt.value)}
+                className={`text-left rounded-xl border p-3 transition-all ${
+                  raceType === opt.value
+                    ? "border-blue-500 bg-blue-50 ring-2 ring-blue-300"
+                    : "border-gray-200 bg-white hover:border-gray-400"
+                }`}
+              >
+                <p className="font-semibold text-gray-800 text-sm">{opt.emoji} {opt.label}</p>
+                <p className="text-xs text-gray-500 mt-1">{opt.description}</p>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {raceType === "trail" && (
+          <div className="space-y-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">希望距離 (km)</label>
+              <input
+                type="number"
+                value={trailDistance}
+                onChange={(e) => setTrailDistance(e.target.value)}
+                min="1"
+                placeholder="30"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">難易度</label>
+              <div className="grid grid-cols-3 gap-2">
+                {DIFFICULTY_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setTrailDifficulty(opt.value)}
+                    className={`rounded-lg border py-2 text-sm font-medium transition-all ${
+                      trailDifficulty === opt.value
+                        ? "border-blue-500 bg-blue-50 text-blue-700 ring-2 ring-blue-300"
+                        : "border-gray-200 bg-white text-gray-600 hover:border-gray-400"
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-gray-500 mt-2">
+                難易度は距離に対する累積標高の割合が目安: 〜3.5% やさしめ / 5%前後 中程度 / 6.5%〜 ハード（例: 30kmで約1,500m＝中程度）
+                {targetElevationM > 0 && (
+                  <span className="block mt-1 font-medium text-gray-700">
+                    この条件の累積標高目安: 約{targetElevationM.toLocaleString()}m
+                  </span>
+                )}
+              </p>
+            </div>
+          </div>
+        )}
+
         <div>
           <label className="block text-xs font-medium text-gray-600 mb-2">目的を選ぶ</label>
           <div className="grid grid-cols-2 gap-3">
@@ -174,7 +281,7 @@ export function Races() {
 
       <button
         onClick={getRecommendations}
-        disabled={loading || prefectureMissing}
+        disabled={loading || prefectureMissing || trailDistanceMissing}
         className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 text-white rounded-xl py-4 font-semibold transition-colors shadow mb-2"
       >
         {loading ? (

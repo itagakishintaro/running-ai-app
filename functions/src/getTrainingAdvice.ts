@@ -2,6 +2,7 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { defineSecret } from "firebase-functions/params";
 import * as admin from "firebase-admin";
 import Anthropic from "@anthropic-ai/sdk";
+import { describeGoal, GoalDoc } from "./goalLabel";
 
 const anthropicApiKey = defineSecret("ANTHROPIC_API_KEY");
 
@@ -111,6 +112,7 @@ export const getTrainingAdvice = onCall(
       buildup:  "ビルドアップ走",
       tempo:    "テンポ走（閾値走）",
       interval: "インターバルトレーニング",
+      trail:    "トレイルラン",
       cross:    "クロストレーニング",
       rest:     "休養",
     };
@@ -122,17 +124,16 @@ export const getTrainingAdvice = onCall(
             .map((t) => {
               const label = typeLabel[t.type] ?? t.type;
               if (t.type === "rest") return `${withWeekday(t.date)}: 休養`;
-              return `${withWeekday(t.date)}: ${label} ${t.distanceKm}km / ${formatTime(t.durationSec)} / ペース${formatTime(t.avgPaceSecPerKm)}/km${t.notes ? ` / ${t.notes}` : ""}`;
+              return `${withWeekday(t.date)}: ${label} ${t.distanceKm}km / ${formatTime(t.durationSec)} / ペース${formatTime(t.avgPaceSecPerKm)}/km${t.elevationGainM ? ` / 累積標高${t.elevationGainM}m` : ""}${t.notes ? ` / ${t.notes}` : ""}`;
             })
             .join("\n");
 
     const goalLines = goals
       .map((g) => {
-        const marathonLabel = g.marathonType === "full" ? "フルマラソン(42.195km)" : "ハーフマラソン(21.0975km)";
         const daysUntilGoal = Math.ceil(
           (new Date(g.targetDate).getTime() - new Date(today).getTime()) / (1000 * 60 * 60 * 24)
         );
-        return `- 種目: ${marathonLabel}\n  現在のタイム: ${formatTime(g.currentTimeSec)}\n  目標タイム: ${formatTime(g.targetTimeSec)}\n  目標日: ${withWeekday(g.targetDate)}（本日から${daysUntilGoal}日後）`;
+        return `- ${describeGoal(g as GoalDoc)}\n  目標日: ${withWeekday(g.targetDate)}（本日から${daysUntilGoal}日後）`;
       })
       .join("\n");
 

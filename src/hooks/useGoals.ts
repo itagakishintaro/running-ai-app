@@ -39,10 +39,15 @@ export function useGoals(uid: string | undefined) {
         const data = d.data();
         return {
           id: d.id,
+          goalType: data.goalType,
           marathonType: data.marathonType,
           currentTimeSec: data.currentTimeSec,
           targetTimeSec: data.targetTimeSec,
           targetDate: data.targetDate,
+          raceName: data.raceName,
+          distanceKm: data.distanceKm,
+          elevationGainM: data.elevationGainM,
+          trailTargetType: data.trailTargetType,
           updatedAt: data.updatedAt?.toDate?.() ?? new Date(),
         } as Goal;
       });
