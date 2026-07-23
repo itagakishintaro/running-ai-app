@@ -28,6 +28,41 @@ function withWeekday(dateStr: string): string {
   return `${dateStr}（${WEEKDAYS[d.getUTCDay()]}）`;
 }
 
+function isIsoDateString(value: unknown): value is string {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return false;
+  }
+  const d = new Date(`${value}T00:00:00Z`);
+  return !isNaN(d.getTime()) && d.toISOString().slice(0, 10) === value;
+}
+
+function extractMenuDateRange(menuText: string): { startDate: string; endDate: string } | null {
+  const dates = Array.from(
+    new Set(
+      Array.from(menuText.matchAll(/\b\d{4}-\d{2}-\d{2}\b/g), (m) => m[0])
+        .filter(isIsoDateString)
+    )
+  ).sort();
+
+  if (dates.length === 0) return null;
+  return { startDate: dates[0], endDate: dates[dates.length - 1] };
+}
+
+function dateStringFromTimestampLike(value: unknown): string | null {
+  const maybeDate =
+    value instanceof Date
+      ? value
+      : value &&
+        typeof value === "object" &&
+        "toDate" in value &&
+        typeof value.toDate === "function"
+      ? value.toDate()
+      : null;
+
+  if (!(maybeDate instanceof Date) || isNaN(maybeDate.getTime())) return null;
+  return maybeDate.toISOString().slice(0, 10);
+}
+
 const typeLabel: Record<string, string> = {
   jog:      "ジョグ",
   run:      "ランニング",
@@ -72,7 +107,51 @@ export const getTrainingFeedback = onCall(
 
     const profile = profileSnap.exists ? profileSnap.data()! : null;
     const goals = goalsSnap.docs.map((d) => d.data());
-    const proposedMenu = adviceSnap.exists ? (adviceSnap.data()!.advice as string) : "";
+
+    // --- 提案メニューの取得と「今回のトレーニング日にまだ有効か」の判定 ---------
+    // 以前は保存済みの提案メニューを無条件でLLMに渡し「実績と比較せよ」と指示していた。
+    // しかしメニューには対象期間があり、しばらくアドバイスを更新していないと
+    // 保存されているのは過去の期間のメニューになる。今日の日付やメニューの対象期間を
+    // LLMに与えていなかったため、古いメニューを現行プランと誤認して比較してしまっていた。
+    // ここで対象期間と今回のトレーニング日をコードで突き合わせ、有効なメニューのときだけ
+    // 比較させる（日付は YYYY-MM-DD 文字列なので辞書順比較が日付比較として成立する）。
+    const today = new Date().toISOString().slice(0, 10);
+    const adviceData = adviceSnap.exists ? adviceSnap.data()! : null;
+    const proposedMenu = (adviceData?.advice as string) ?? "";
+    const storedMenuStartDate = adviceData?.menuStartDate;
+    const storedMenuEndDate = adviceData?.menuEndDate;
+    const inferredMenuRange = proposedMenu ? extractMenuDateRange(proposedMenu) : null;
+    const menuStartDate = isIsoDateString(storedMenuStartDate)
+      ? storedMenuStartDate
+      : inferredMenuRange?.startDate;
+    const menuEndDate = isIsoDateString(storedMenuEndDate)
+      ? storedMenuEndDate
+      : inferredMenuRange?.endDate;
+    const menuPeriodSource =
+      isIsoDateString(storedMenuStartDate) && isIsoDateString(storedMenuEndDate)
+        ? "saved"
+        : inferredMenuRange
+        ? "inferred"
+        : "unknown";
+    const generatedAtStr = dateStringFromTimestampLike(adviceData?.generatedAt);
+
+    // メニューの状態を判定:
+    //  none    … 提案メニューが未生成
+    //  current … 対象期間が今回のトレーニング日を含む（＝現行プランとして有効）
+    //  stale   … 対象期間が今回のトレーニング日を含まない（過去/別期間の古いメニュー）
+    //  unknown … 対象期間が保存されておらず、メニュー本文からも推定できない旧データ
+    type MenuStatus = "none" | "current" | "stale" | "unknown";
+    let menuStatus: MenuStatus = "none";
+    if (proposedMenu) {
+      if (menuStartDate && menuEndDate) {
+        menuStatus =
+          training.date >= menuStartDate && training.date <= menuEndDate
+            ? "current"
+            : "stale";
+      } else {
+        menuStatus = "unknown";
+      }
+    }
 
     // 目標情報（あれば）
     let goalSummary = "（目標未設定）";
@@ -89,21 +168,54 @@ export const getTrainingFeedback = onCall(
         ? `${withWeekday(training.date)}: 休養`
         : `${withWeekday(training.date)}: ${label} ${training.distanceKm}km / ${formatTime(training.durationSec)} / ペース${formatTime(training.avgPaceSecPerKm)}/km${training.elevationGainM ? ` / 累積標高${training.elevationGainM}m` : ""}${training.notes ? ` / メモ: ${training.notes}` : ""}`;
 
+    // メニューの状態に応じて「提案メニュー」ブロックと比較指示を組み立てる。
+    // 期間の分かる形で提示し、古い/対象外のメニューは比較させない。
+    let menuBlock: string;
+    let compareInstruction: string;
+    if (menuStatus === "current") {
+      const sourceNote = menuPeriodSource === "inferred" ? "メニュー本文の日付から推定" : "保存済み期間";
+      menuBlock = `【AIが提案していたトレーニングメニュー（対象期間 ${menuStartDate}〜${menuEndDate}／${sourceNote}／今回のトレーニング日を含む・現行プラン）】\n${proposedMenu}`;
+      compareInstruction =
+        "1. この提案メニューは今回のトレーニング日を含む有効な期間のものです。提案メニューの同じ日付の内容と今回の実績にズレがある場合（予定どおりできなかった・強度や距離が違う等）は、今後どう調整・リカバリすればよいか。ズレが小さい場合は前向きに評価してください。";
+    } else if (menuStatus === "stale") {
+      // 対象期間が分かっていて、今回のトレーニング日を含まない = 明確に古い/別期間。
+      const sourceNote = menuPeriodSource === "inferred" ? "メニュー本文の日付から推定" : "保存済み期間";
+      menuBlock =
+        `【以前に提案したトレーニングメニューの扱い】\n` +
+        `保存済みの提案メニューは対象期間 ${menuStartDate}〜${menuEndDate}（${sourceNote}）で、今回のトレーニング日（${withWeekday(training.date)}）を含みません。\n` +
+        "これは現在有効な提案メニューではなく、過去（または別期間）に作成した古いものです。古いメニュー本文は比較対象から除外しています。";
+      compareInstruction =
+        "1. 上記の提案メニューは今回のトレーニング日を含まない古いものです。今回の実績と比較・照合しないでください。今回のトレーニングそのものを評価し、必要であれば「最新のトレーニングメニューを生成し直すと今後の計画が立てやすい」旨をやんわり添えてください。";
+    } else if (menuStatus === "unknown") {
+      // 旧データで対象期間が保存されておらず、メニュー本文からも推定できない。
+      // 有効性を判断できないものを比較対象にすると誤判定の温床になるため、比較させない。
+      const genNote = generatedAtStr ? `生成日 ${generatedAtStr}` : "生成時期不明";
+      menuBlock =
+        `【以前に提案したトレーニングメニューの扱い】\n` +
+        `保存済みの提案メニューはありますが、対象期間を確認できません（${genNote}）。有効な現行プランか判断できないため、古いメニュー本文は比較対象から除外しています。`;
+      compareInstruction =
+        "1. 保存済みの提案メニューは対象期間を確認できないため、今回の実績と比較・照合しないでください。今回のトレーニングそのものを評価し、必要であれば「最新のトレーニングメニューを生成し直すと今後の計画が立てやすい」旨をやんわり添えてください。";
+    } else {
+      menuBlock = "【AIが提案していたトレーニングメニュー】\n（提案メニューはまだありません）";
+      compareInstruction =
+        "1. 提案メニューはまだありません。今回のトレーニング内容を前向きに評価してください。";
+    }
+
     const userMessage = `
+【本日の日付】${withWeekday(today)}
 ${profile ? `【ランナー】${profile.name}さん` : ""}
 【目標】${goalSummary}
 
 【今回記録したトレーニング】
 ${actualSummary}
 
-【AIが提案していたトレーニングメニュー】
-${proposedMenu || "（提案メニューはまだありません）"}
+${menuBlock}
 
 上記をふまえ、今回のトレーニングについて短い「一言アドバイス」を返してください。
+日付の解釈に注意し、「本日の日付」「今回記録したトレーニング」「提案メニューの対象期間」の前後関係を踏まえてコメントしてください。
 特に次の2点を重視してください：
-1. 提案メニューと今回の実績にズレがある場合（予定どおりできなかった・強度や距離が違う等）、今後どう調整・リカバリすればよいか。
+${compareInstruction}
 2. 次回のトレーニングに向けた注意点（疲労・故障予防、ペース配分など）。
-提案メニューが無い、またはズレが小さい場合は、今回の内容への前向きな評価と次回への注意点を中心にしてください。
 
 制約：全体で2〜3文程度。励ましつつ実践的に。Markdownの太字を少し使ってよいが、見出しや箇条書きの羅列は避け、簡潔にまとめてください。日本語で。
 `.trim();

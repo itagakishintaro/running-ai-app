@@ -8,6 +8,8 @@ import remarkGfm from "remark-gfm";
 
 interface AdviceResult {
   advice: string;
+  startDate: string;
+  endDate: string;
 }
 
 function defaultStartDate(): string {
@@ -58,6 +60,11 @@ export function Advice() {
       await setDoc(doc(db, "users", user.uid, "data", "advice"), {
         advice: newAdvice,
         generatedAt: serverTimestamp(),
+        // メニューの対象期間を保存しておく。トレーニング登録後の一言アドバイス
+        // （getTrainingFeedback）が、この期間に今回のトレーニング日が含まれるかで
+        // 「提案メニューがまだ有効か／過去のものか」を正しく判定できるようにするため。
+        menuStartDate: result.data.startDate ?? startDate,
+        menuEndDate: result.data.endDate ?? endDate,
       });
     } catch (e) {
       setError("アドバイスの取得に失敗しました。プロフィールと目標が登録されているか確認してください。");

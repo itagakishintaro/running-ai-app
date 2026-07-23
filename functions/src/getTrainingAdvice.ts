@@ -181,6 +181,9 @@ ${restDays && restDays.length > 0 ? `【トレーニングできない曜日】:
     });
 
     const advice = response.content[0].type === "text" ? response.content[0].text : "";
-    return { advice };
+    // menuStart/menuEnd も返す。フィードバック機能（getTrainingFeedback）が
+    // 「提案メニューが今回のトレーニング日を含む=まだ有効か」をコードで判定できるよう、
+    // クライアント側で advice ドキュメントに保存させるため。
+    return { advice, startDate: menuStart, endDate: menuEnd };
   }
 );
