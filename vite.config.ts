@@ -15,7 +15,7 @@ export default defineConfig({
         short_name: 'RunCoach',
         description: 'ランニングトレーニングをAIがサポートするコーチングアプリ',
         lang: 'ja',
-        theme_color: '#2563eb',
+        theme_color: '#ffffff',
         background_color: '#ffffff',
         display: 'standalone',
         start_url: '/',

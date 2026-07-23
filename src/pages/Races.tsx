@@ -2,11 +2,13 @@ import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { httpsCallable } from "firebase/functions";
 import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
+import { Footprints, Mountain, Plane, Medal } from "lucide-react";
 import { functions, db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import { useProfile } from "../hooks/useProfile";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { Card, Field, Input, Button, EmptyState, controlClass, cn } from "../components/ui";
+import { Markdown } from "../components/Markdown";
+import type { LucideIcon } from "lucide-react";
 
 type RaceMode = "training" | "travel";
 type RaceType = "marathon" | "trail";
@@ -17,14 +19,14 @@ interface RaceResult {
   mode: RaceMode;
 }
 
-const MODE_OPTIONS: { value: RaceMode; emoji: string; label: string; description: string }[] = [
-  { value: "training", emoji: "🏃", label: "トレーニング目的", description: "近場の大会で実戦経験を積む" },
-  { value: "travel", emoji: "🧳", label: "旅RUN", description: "旅行を兼ねて楽しむ大会を探す" },
+const MODE_OPTIONS: { value: RaceMode; icon: LucideIcon; label: string; description: string }[] = [
+  { value: "training", icon: Footprints, label: "トレーニング目的", description: "近場の大会で実戦経験を積む" },
+  { value: "travel", icon: Plane, label: "旅RUN", description: "旅行を兼ねて楽しむ大会を探す" },
 ];
 
-const RACE_TYPE_OPTIONS: { value: RaceType; emoji: string; label: string; description: string }[] = [
-  { value: "marathon", emoji: "🏃", label: "マラソン", description: "ロードのフル・ハーフなど" },
-  { value: "trail", emoji: "⛰️", label: "トレイルラン", description: "山岳・トレイルの大会" },
+const RACE_TYPE_OPTIONS: { value: RaceType; icon: LucideIcon; label: string; description: string }[] = [
+  { value: "marathon", icon: Footprints, label: "マラソン", description: "ロードのフル・ハーフなど" },
+  { value: "trail", icon: Mountain, label: "トレイルラン", description: "山岳・トレイルの大会" },
 ];
 
 // 表示専用の難易度係数（条件の正はFunctions側のTRAIL_DIFFICULTYが持つ）
@@ -33,6 +35,14 @@ const DIFFICULTY_OPTIONS: { value: TrailDifficulty; label: string; ratio: number
   { value: "moderate", label: "中程度",   ratio: 0.05 },
   { value: "hard",     label: "ハード",   ratio: 0.065 },
 ];
+
+const selectCardClass = (selected: boolean) =>
+  cn(
+    "text-left rounded-xl border p-3 transition-all",
+    selected
+      ? "border-primary-500 bg-primary-50 ring-2 ring-primary-300"
+      : "border-gray-200 bg-white hover:border-gray-400"
+  );
 
 export function Races() {
   const { user } = useAuth();
@@ -136,32 +146,31 @@ export function Races() {
     }
   };
 
-  if (initialLoading) return <p className="text-center text-gray-400 py-10">読み込み中...</p>;
+  if (initialLoading) return <EmptyState message="読み込み中..." />;
 
   return (
     <div>
-      <h2 className="text-xl font-bold text-gray-800 mb-2">大会レコメンド</h2>
+      <h2 className="text-xl font-bold text-gray-900 mb-2">大会レコメンド</h2>
       <p className="text-sm text-gray-500 mb-5">
         あなたの目標と現在のタイムをもとに、収集済みの全国大会データベースから出場すべき大会を提案します。エントリー期間もチェックします。
       </p>
 
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 mb-4 space-y-4">
+      <Card className="mb-4 space-y-4">
         <div>
-          <label className="block text-xs font-medium text-gray-600 mb-2">種目を選ぶ</label>
+          <p className="text-sm font-medium text-gray-700 mb-2">種目を選ぶ</p>
           <div className="grid grid-cols-2 gap-3">
-            {RACE_TYPE_OPTIONS.map((opt) => (
+            {RACE_TYPE_OPTIONS.map(({ value, icon: Icon, label, description }) => (
               <button
-                key={opt.value}
+                key={value}
                 type="button"
-                onClick={() => setRaceType(opt.value)}
-                className={`text-left rounded-xl border p-3 transition-all ${
-                  raceType === opt.value
-                    ? "border-blue-500 bg-blue-50 ring-2 ring-blue-300"
-                    : "border-gray-200 bg-white hover:border-gray-400"
-                }`}
+                onClick={() => setRaceType(value)}
+                className={selectCardClass(raceType === value)}
               >
-                <p className="font-semibold text-gray-800 text-sm">{opt.emoji} {opt.label}</p>
-                <p className="text-xs text-gray-500 mt-1">{opt.description}</p>
+                <p className="font-semibold text-gray-900 text-sm flex items-center gap-1.5">
+                  <Icon className="w-4 h-4 text-primary-600" />
+                  {label}
+                </p>
+                <p className="text-xs text-gray-500 mt-1">{description}</p>
               </button>
             ))}
           </div>
@@ -169,30 +178,29 @@ export function Races() {
 
         {raceType === "trail" && (
           <div className="space-y-3">
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">希望距離 (km)</label>
-              <input
+            <Field label="希望距離 (km)">
+              <Input
                 type="number"
                 value={trailDistance}
                 onChange={(e) => setTrailDistance(e.target.value)}
                 min="1"
                 placeholder="30"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
               />
-            </div>
+            </Field>
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">難易度</label>
+              <p className="text-sm font-medium text-gray-700 mb-2">難易度</p>
               <div className="grid grid-cols-3 gap-2">
                 {DIFFICULTY_OPTIONS.map((opt) => (
                   <button
                     key={opt.value}
                     type="button"
                     onClick={() => setTrailDifficulty(opt.value)}
-                    className={`rounded-lg border py-2 text-sm font-medium transition-all ${
+                    className={cn(
+                      "rounded-lg border py-2 text-sm font-medium transition-all",
                       trailDifficulty === opt.value
-                        ? "border-blue-500 bg-blue-50 text-blue-700 ring-2 ring-blue-300"
+                        ? "border-primary-500 bg-primary-50 text-primary-700 ring-2 ring-primary-300"
                         : "border-gray-200 bg-white text-gray-600 hover:border-gray-400"
-                    }`}
+                    )}
                   >
                     {opt.label}
                   </button>
@@ -211,43 +219,42 @@ export function Races() {
         )}
 
         <div>
-          <label className="block text-xs font-medium text-gray-600 mb-2">目的を選ぶ</label>
+          <p className="text-sm font-medium text-gray-700 mb-2">目的を選ぶ</p>
           <div className="grid grid-cols-2 gap-3">
-            {MODE_OPTIONS.map((opt) => (
+            {MODE_OPTIONS.map(({ value, icon: Icon, label, description }) => (
               <button
-                key={opt.value}
+                key={value}
                 type="button"
-                onClick={() => setMode(opt.value)}
-                className={`text-left rounded-xl border p-3 transition-all ${
-                  mode === opt.value
-                    ? "border-blue-500 bg-blue-50 ring-2 ring-blue-300"
-                    : "border-gray-200 bg-white hover:border-gray-400"
-                }`}
+                onClick={() => setMode(value)}
+                className={selectCardClass(mode === value)}
               >
-                <p className="font-semibold text-gray-800 text-sm">{opt.emoji} {opt.label}</p>
-                <p className="text-xs text-gray-500 mt-1">{opt.description}</p>
+                <p className="font-semibold text-gray-900 text-sm flex items-center gap-1.5">
+                  <Icon className="w-4 h-4 text-primary-600" />
+                  {label}
+                </p>
+                <p className="text-xs text-gray-500 mt-1">{description}</p>
               </button>
             ))}
           </div>
         </div>
 
         <div>
-          <label className="block text-xs font-medium text-gray-600 mb-1">対象時期（任意）</label>
+          <p className="text-sm font-medium text-gray-700 mb-2">対象時期（任意）</p>
           <div className="flex items-center gap-2">
-            <input
+            <Input
               type="month"
               value={periodFrom}
               onChange={(e) => setPeriodFrom(e.target.value)}
               max={periodTo || undefined}
-              className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+              className="flex-1"
             />
             <span className="text-gray-400 text-sm">〜</span>
-            <input
+            <Input
               type="month"
               value={periodTo}
               onChange={(e) => setPeriodTo(e.target.value)}
               min={periodFrom || undefined}
-              className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+              className="flex-1"
             />
           </div>
           <p className="text-xs text-gray-500 mt-1">
@@ -256,46 +263,44 @@ export function Races() {
         </div>
 
         {(prefectureMissing || needsPrefecture) && (
-          <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-3 text-sm text-yellow-800">
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-sm text-amber-800">
             近場の大会を探すには居住地の登録が必要です。{" "}
-            <Link to="/profile" className="text-blue-600 underline">
+            <Link to="/profile" className="text-primary-700 underline font-medium">
               プロフィールで居住地（都道府県）を登録する
             </Link>
           </div>
         )}
 
         {mode === "travel" && (
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">旅のリクエスト（任意）</label>
+          <Field label="旅のリクエスト（任意）">
             <textarea
               value={freeRequest}
               onChange={(e) => setFreeRequest(e.target.value)}
               rows={2}
               maxLength={500}
               placeholder="例: 地酒を楽しみたい / 温泉に入りたい / 海沿いを走りたい"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+              className={controlClass}
             />
-          </div>
+          </Field>
         )}
-      </div>
+      </Card>
 
-      <button
+      <Button
         onClick={getRecommendations}
+        loading={loading}
         disabled={loading || prefectureMissing || trailDistanceMissing}
-        className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 text-white rounded-xl py-4 font-semibold transition-colors shadow mb-2"
+        size="lg"
+        className="w-full mb-2"
       >
         {loading ? (
-          <span className="flex items-center justify-center gap-2">
-            <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-            </svg>
-            大会を検索中...
-          </span>
+          "大会を検索中..."
         ) : (
-          "🏅 おすすめの大会を探してもらう"
+          <>
+            <Medal className="w-5 h-5" />
+            おすすめの大会を探してもらう
+          </>
         )}
-      </button>
+      </Button>
       {loading && (
         <p className="text-xs text-gray-400 text-center mb-4">
           30秒〜1分ほどかかります。このままお待ちください
@@ -309,23 +314,14 @@ export function Races() {
       )}
 
       {recommendation && (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 mt-3">
+        <Card padding="md" className="mt-3">
           {generatedAt && (
             <p className="text-xs text-gray-400 mb-4">
               生成日時: {generatedAt.toLocaleString("ja-JP")}
             </p>
           )}
-          <div className="prose prose-sm max-w-none prose-headings:font-bold prose-headings:text-gray-800 prose-h2:text-base prose-h3:text-sm prose-h3:text-blue-700 prose-p:text-gray-700 prose-p:leading-relaxed prose-li:text-gray-700 prose-li:leading-relaxed prose-strong:text-gray-900 prose-hr:my-4 prose-a:text-blue-600 prose-a:underline">
-            <ReactMarkdown
-              remarkPlugins={[remarkGfm]}
-              components={{
-                a: (props) => <a {...props} target="_blank" rel="noopener noreferrer" />,
-              }}
-            >
-              {recommendation}
-            </ReactMarkdown>
-          </div>
-        </div>
+          <Markdown>{recommendation}</Markdown>
+        </Card>
       )}
     </div>
   );

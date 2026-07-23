@@ -1,2 +1,34 @@
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
+
+/* ------------------------------------------------------------------
+   デザイントークン
+   白基調 + オレンジ1アクセント（Strava風）+ 十分な余白 + 控えめな影
+------------------------------------------------------------------ */
+@theme {
+  /* アクセントカラー（primary）: ランニングらしいオレンジ */
+  --color-primary-50: #fff7ed;
+  --color-primary-100: #ffedd5;
+  --color-primary-200: #fed7aa;
+  --color-primary-300: #fdba74;
+  --color-primary-400: #fb923c;
+  --color-primary-500: #f97316;
+  --color-primary-600: #ea580c;
+  --color-primary-700: #c2410c;
+  --color-primary-800: #9a3412;
+  --color-primary-900: #7c2d12;
+  --color-primary-950: #431407;
+
+  /* フォント: 欧文/数字はInter(バンドル済み)、和文はOS標準にフォールバック */
+  --font-sans: "Inter Variable", "Hiragino Sans", "Hiragino Kaku Gothic ProN",
+    "Yu Gothic UI", "Noto Sans JP", system-ui, -apple-system, sans-serif;
+
+  /* 影は2段階のみ許可 */
+  --shadow-card: 0 1px 2px 0 rgb(0 0 0 / 0.04);
+  --shadow-overlay: 0 8px 30px rgb(0 0 0 / 0.12);
+}
+
+/* チェックボックス等ネイティブUIのアクセント色を統一 */
+:root {
+  accent-color: var(--color-primary-600);
+}

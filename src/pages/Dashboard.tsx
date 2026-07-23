@@ -1,9 +1,11 @@
 import { Link } from "react-router-dom";
+import { Sparkles, Medal, AlertTriangle, Mountain, ArrowRight } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
 import { useProfile } from "../hooks/useProfile";
 import { useGoals } from "../hooks/useGoals";
 import { useTrainings } from "../hooks/useTrainings";
 import { formatTime, getNearestGoal, isTrailGoal } from "../types";
+import { Card } from "../components/ui";
 
 export function Dashboard() {
   const { user } = useAuth();
@@ -15,54 +17,63 @@ export function Dashboard() {
   const totalDistanceThisMonth = trainings
     .filter((t) => t.date.startsWith(new Date().toISOString().slice(0, 7)))
     .reduce((sum, t) => sum + t.distanceKm, 0);
+  const trainingCountThisMonth = trainings.filter((t) =>
+    t.date.startsWith(new Date().toISOString().slice(0, 7))
+  ).length;
 
   const nearestGoal = getNearestGoal(goals);
   const isSetupComplete = profile && goals.length > 0;
 
   return (
     <div className="space-y-5">
-      <h2 className="text-xl font-bold text-gray-800">
-        こんにちは、{profile?.name || user?.displayName}さん 👋
+      <h2 className="text-xl font-bold text-gray-900">
+        こんにちは、{profile?.name || user?.displayName}さん
       </h2>
 
       {!isSetupComplete && (
-        <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 text-sm text-yellow-800">
-          <p className="font-semibold mb-2">⚠️ 初期設定が必要です</p>
-          <ul className="space-y-1">
-            {!profile && (
-              <li>
-                <Link to="/profile" className="text-blue-600 underline">
-                  プロフィールを登録
-                </Link>
-              </li>
-            )}
-            {goals.length === 0 && (
-              <li>
-                <Link to="/goal" className="text-blue-600 underline">
-                  目標を設定
-                </Link>
-              </li>
-            )}
-          </ul>
-        </div>
+        <Card className="bg-amber-50 border-amber-200">
+          <div className="flex gap-3">
+            <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+            <div className="text-sm text-amber-800">
+              <p className="font-semibold mb-2">初期設定が必要です</p>
+              <ul className="space-y-1">
+                {!profile && (
+                  <li>
+                    <Link to="/profile" className="text-primary-700 underline font-medium">
+                      プロフィールを登録
+                    </Link>
+                  </li>
+                )}
+                {goals.length === 0 && (
+                  <li>
+                    <Link to="/goal" className="text-primary-700 underline font-medium">
+                      目標を設定
+                    </Link>
+                  </li>
+                )}
+              </ul>
+            </div>
+          </div>
+        </Card>
       )}
 
       {nearestGoal && (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+        <Card>
           <p className="text-xs text-gray-500 font-medium mb-1">現在の目標</p>
           {isTrailGoal(nearestGoal) ? (
             <>
-              <p className="font-bold text-gray-800">
-                ⛰️ {nearestGoal.raceName || "トレイルラン"}
+              <p className="font-bold text-gray-900 flex items-center gap-1.5">
+                <Mountain className="w-4 h-4 text-primary-600" />
+                {nearestGoal.raceName || "トレイルラン"}
               </p>
-              <div className="flex gap-4 mt-2 text-sm text-gray-600 flex-wrap">
+              <div className="flex gap-4 mt-2 text-sm text-gray-600 flex-wrap tabular-nums">
                 <span>
                   {nearestGoal.distanceKm}km
                   {nearestGoal.elevationGainM
                     ? ` / D+${nearestGoal.elevationGainM.toLocaleString()}m`
                     : ""}
                 </span>
-                <span className="font-semibold text-blue-600">
+                <span className="font-semibold text-primary-600">
                   {nearestGoal.trailTargetType === "time" && nearestGoal.targetTimeSec
                     ? `目標: ${formatTime(nearestGoal.targetTimeSec)}`
                     : "目標: 完走"}
@@ -72,66 +83,69 @@ export function Dashboard() {
             </>
           ) : (
             <>
-              <p className="font-bold text-gray-800">
+              <p className="font-bold text-gray-900">
                 {nearestGoal.marathonType === "full" ? "フルマラソン" : "ハーフマラソン"}
               </p>
-              <div className="flex gap-4 mt-2 text-sm text-gray-600">
+              <div className="flex items-center gap-2 mt-2 text-sm text-gray-600 flex-wrap tabular-nums">
                 <span>現在: {formatTime(nearestGoal.currentTimeSec ?? 0)}</span>
-                <span>→</span>
-                <span className="font-semibold text-blue-600">
+                <ArrowRight className="w-4 h-4 text-gray-400" />
+                <span className="font-semibold text-primary-600">
                   目標: {formatTime(nearestGoal.targetTimeSec ?? 0)}
                 </span>
                 <span className="text-gray-400">({nearestGoal.targetDate}まで)</span>
               </div>
             </>
           )}
-        </div>
+        </Card>
       )}
 
       <div className="grid grid-cols-2 gap-3">
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 text-center">
-          <p className="text-2xl font-bold text-blue-600">
+        <Card className="text-center">
+          <p className="text-2xl font-bold text-primary-600 tabular-nums">
             {totalDistanceThisMonth.toFixed(1)}
           </p>
           <p className="text-xs text-gray-500 mt-1">今月の走行距離 (km)</p>
-        </div>
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 text-center">
-          <p className="text-2xl font-bold text-blue-600">
-            {trainings.filter((t) =>
-              t.date.startsWith(new Date().toISOString().slice(0, 7))
-            ).length}
+        </Card>
+        <Card className="text-center">
+          <p className="text-2xl font-bold text-primary-600 tabular-nums">
+            {trainingCountThisMonth}
           </p>
           <p className="text-xs text-gray-500 mt-1">今月のトレーニング回数</p>
-        </div>
+        </Card>
       </div>
 
       <Link
         to="/stats"
-        className="block text-center text-sm text-blue-500 hover:underline -mt-2"
+        className="block text-center text-sm text-gray-500 hover:text-gray-700 -mt-2"
       >
         過去の月別・週別統計を見る →
       </Link>
 
       <Link
         to="/advice"
-        className="block w-full bg-blue-600 hover:bg-blue-700 text-white text-center rounded-xl py-4 font-semibold transition-colors shadow"
+        className="flex items-center justify-center gap-2 w-full bg-primary-600 hover:bg-primary-700 active:bg-primary-800 text-white text-center rounded-xl py-3.5 font-semibold transition-colors"
       >
-        🤖 AIにトレーニングメニューを提案してもらう
+        <Sparkles className="w-5 h-5" />
+        AIにトレーニングメニューを提案してもらう
       </Link>
 
       <Link
         to="/races"
-        className="block w-full bg-emerald-600 hover:bg-emerald-700 text-white text-center rounded-xl py-4 font-semibold transition-colors shadow"
+        className="flex items-center justify-center gap-2 w-full bg-white hover:bg-gray-50 text-gray-800 border border-gray-200 text-center rounded-xl py-3.5 font-semibold transition-colors"
       >
-        🏅 出場するマラソン大会を探す
+        <Medal className="w-5 h-5 text-primary-600" />
+        出場するマラソン大会を探す
       </Link>
 
       {recentTrainings.length > 0 && (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+        <Card>
           <p className="text-sm font-semibold text-gray-700 mb-3">直近のトレーニング</p>
-          <ul className="space-y-2">
+          <ul className="divide-y divide-gray-100">
             {recentTrainings.map((t) => (
-              <li key={t.id} className="flex justify-between text-sm text-gray-600">
+              <li
+                key={t.id}
+                className="flex justify-between text-sm text-gray-600 py-2 first:pt-0 last:pb-0 tabular-nums"
+              >
                 <span>{t.date}</span>
                 <span>{t.distanceKm} km</span>
                 <span>{formatTime(t.durationSec)}</span>
@@ -141,11 +155,11 @@ export function Dashboard() {
           </ul>
           <Link
             to="/training"
-            className="block mt-3 text-center text-xs text-blue-600 hover:underline"
+            className="block mt-3 text-center text-xs text-primary-600 hover:underline font-medium"
           >
             すべて表示 →
           </Link>
-        </div>
+        </Card>
       )}
     </div>
   );

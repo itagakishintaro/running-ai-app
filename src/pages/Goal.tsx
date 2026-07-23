@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Plus, Mountain } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
 import { useGoals } from "../hooks/useGoals";
 import {
@@ -11,6 +12,7 @@ import {
   parseTimeToSec,
   formatTime,
 } from "../types";
+import { Card, Field, Input, Button, Modal, EmptyState, cn } from "../components/ui";
 
 function formatInputTime(totalSec: number | null | undefined): string {
   return totalSec && totalSec > 0 ? formatTime(totalSec) : "";
@@ -18,10 +20,18 @@ function formatInputTime(totalSec: number | null | undefined): string {
 
 function goalLabel(goal: Goal): string {
   if (isTrailGoal(goal)) {
-    return `⛰️ ${goal.raceName || "トレイルラン"} ${goal.targetDate}まで`;
+    return `${goal.raceName || "トレイルラン"} ${goal.targetDate}まで`;
   }
   return `${goal.marathonType === "full" ? "フルマラソン" : "ハーフマラソン"} ${goal.targetDate}まで`;
 }
+
+const segClass = (selected: boolean) =>
+  cn(
+    "flex-1 inline-flex items-center justify-center gap-1 py-2 rounded-lg border text-sm font-medium transition-colors",
+    selected
+      ? "bg-primary-600 text-white border-primary-600"
+      : "bg-white text-gray-700 border-gray-300 hover:border-primary-400"
+  );
 
 export function Goal() {
   const { user } = useAuth();
@@ -137,23 +147,17 @@ export function Goal() {
   };
 
   if (loading || migrating) {
-    return (
-      <p className="text-center text-gray-400 py-10">
-        {migrating ? "データを移行しています..." : "読み込み中..."}
-      </p>
-    );
+    return <EmptyState message={migrating ? "データを移行しています..." : "読み込み中..."} />;
   }
 
   return (
     <div>
       <div className="flex items-center justify-between mb-5">
-        <h2 className="text-xl font-bold text-gray-800">目標設定</h2>
-        <button
-          onClick={openAdd}
-          className="text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-3 py-2 font-medium transition-colors"
-        >
-          ＋ 目標を追加
-        </button>
+        <h2 className="text-xl font-bold text-gray-900">目標設定</h2>
+        <Button size="sm" onClick={openAdd}>
+          <Plus className="w-4 h-4" />
+          目標を追加
+        </Button>
       </div>
 
       {error && (
@@ -163,44 +167,44 @@ export function Goal() {
       )}
 
       {goals.length === 0 && !formOpen && (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 text-center text-sm text-gray-500">
+        <Card padding="md" className="text-center text-sm text-gray-500">
           目標が登録されていません。右上の「目標を追加」から登録してください。
-        </div>
+        </Card>
       )}
 
       {goals.length > 0 && !formOpen && (
         <ul className="space-y-3">
           {goals.map((goal) => (
-            <li
-              key={goal.id}
-              className="bg-white rounded-xl shadow-sm border border-gray-100 p-4"
-            >
+            <Card key={goal.id} as="li">
               <div className="flex items-start justify-between">
                 <div>
-                  <p className="font-bold text-gray-800">{goalLabel(goal)}</p>
+                  <p className="font-bold text-gray-900 flex items-center gap-1.5">
+                    {isTrailGoal(goal) && <Mountain className="w-4 h-4 text-primary-600" />}
+                    {goalLabel(goal)}
+                  </p>
                   {isTrailGoal(goal) ? (
-                    <p className="text-sm text-gray-600 mt-1">
+                    <p className="text-sm text-gray-600 mt-1 tabular-nums">
                       {goal.distanceKm}km
                       {goal.elevationGainM ? ` / D+${goal.elevationGainM.toLocaleString()}m` : ""} →{" "}
-                      <span className="font-semibold text-blue-600">
+                      <span className="font-semibold text-primary-600">
                         {goal.trailTargetType === "time" && goal.targetTimeSec
                           ? `目標: ${formatTime(goal.targetTimeSec)}`
                           : "目標: 完走（関門内）"}
                       </span>
                     </p>
                   ) : (
-                    <p className="text-sm text-gray-600 mt-1">
+                    <p className="text-sm text-gray-600 mt-1 tabular-nums">
                       現在: {formatTime(goal.currentTimeSec ?? 0)} →{" "}
-                      <span className="font-semibold text-blue-600">
+                      <span className="font-semibold text-primary-600">
                         目標: {formatTime(goal.targetTimeSec ?? 0)}
                       </span>
                     </p>
                   )}
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-1 shrink-0">
                   <button
                     onClick={() => openEdit(goal)}
-                    className="text-sm text-blue-600 hover:text-blue-800 font-medium px-2 py-1"
+                    className="text-sm text-primary-600 hover:text-primary-800 font-medium px-2 py-1"
                   >
                     編集
                   </button>
@@ -212,228 +216,223 @@ export function Goal() {
                   </button>
                 </div>
               </div>
-            </li>
+            </Card>
           ))}
         </ul>
       )}
 
       {(formOpen || goals.length === 0) && (
-        <form
-          onSubmit={handleSubmit}
-          className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 space-y-4 mt-4"
-        >
-          <p className="font-semibold text-gray-800">
-            {editingId ? "目標を編集" : "新しい目標を追加"}
-          </p>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">種目</label>
-            <div className="flex gap-3">
-              {(
-                [
-                  { goalType: "marathon", marathonType: "full", label: "フルマラソン" },
-                  { goalType: "marathon", marathonType: "half", label: "ハーフマラソン" },
-                  { goalType: "trail", marathonType: null, label: "⛰️ トレイルラン" },
-                ] as const
-              ).map((opt) => {
-                const selected =
-                  goalType === opt.goalType &&
-                  (opt.goalType === "trail" || marathonType === opt.marathonType);
-                return (
-                  <button
-                    key={opt.label}
-                    type="button"
-                    onClick={() => {
-                      setGoalType(opt.goalType);
-                      if (opt.marathonType) setMarathonType(opt.marathonType);
-                    }}
-                    className={`flex-1 py-2 rounded-lg border text-sm font-medium transition-colors ${
-                      selected
-                        ? "bg-blue-600 text-white border-blue-600"
-                        : "bg-white text-gray-700 border-gray-300 hover:border-blue-400"
-                    }`}
-                  >
-                    {opt.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {goalType === "trail" ? (
-            <>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  大会名 <span className="text-gray-400 font-normal">(任意)</span>
-                </label>
-                <input
-                  type="text"
-                  value={raceName}
-                  onChange={(e) => setRaceName(e.target.value)}
-                  placeholder="例: ハセツネCUP"
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
-                />
-              </div>
+        <Card padding="md" className="mt-4">
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <p className="font-semibold text-gray-900">
+              {editingId ? "目標を編集" : "新しい目標を追加"}
+            </p>
+            <div>
+              <p className="block text-sm font-medium text-gray-700 mb-2">種目</p>
               <div className="flex gap-3">
-                <div className="flex-1">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">距離 (km)</label>
-                  <input
-                    type="number"
-                    value={distanceStr}
-                    onChange={(e) => setDistanceStr(e.target.value)}
-                    min="1"
-                    step="0.1"
-                    required
-                    placeholder="30"
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
-                  />
-                </div>
-                <div className="flex-1">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    累積標高 (m) <span className="text-gray-400 font-normal">(任意)</span>
-                  </label>
-                  <input
-                    type="number"
-                    value={elevationStr}
-                    onChange={(e) => setElevationStr(e.target.value)}
-                    min="0"
-                    placeholder="1500"
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">目標</label>
-                <div className="flex gap-3">
-                  {(
-                    [
-                      { value: "finish", label: "完走（関門内）" },
-                      { value: "time", label: "目標タイム" },
-                    ] as const
-                  ).map((opt) => (
+                {(
+                  [
+                    { goalType: "marathon", marathonType: "full", label: "フルマラソン" },
+                    { goalType: "marathon", marathonType: "half", label: "ハーフマラソン" },
+                    { goalType: "trail", marathonType: null, label: "トレイルラン" },
+                  ] as const
+                ).map((opt) => {
+                  const selected =
+                    goalType === opt.goalType &&
+                    (opt.goalType === "trail" || marathonType === opt.marathonType);
+                  return (
                     <button
-                      key={opt.value}
+                      key={opt.label}
                       type="button"
-                      onClick={() => setTrailTargetType(opt.value)}
-                      className={`flex-1 py-2 rounded-lg border text-sm font-medium transition-colors ${
-                        trailTargetType === opt.value
-                          ? "bg-blue-600 text-white border-blue-600"
-                          : "bg-white text-gray-700 border-gray-300 hover:border-blue-400"
-                      }`}
+                      onClick={() => {
+                        setGoalType(opt.goalType);
+                        if (opt.marathonType) setMarathonType(opt.marathonType);
+                      }}
+                      className={segClass(selected)}
                     >
+                      {opt.goalType === "trail" && <Mountain className="w-4 h-4" />}
                       {opt.label}
                     </button>
-                  ))}
-                </div>
-                <p className="text-xs text-gray-500 mt-2">
-                  トレランはコースごとに条件が違うため、初挑戦の大会は「完走」目標がおすすめです
-                </p>
+                  );
+                })}
               </div>
-              {trailTargetType === "time" && (
+            </div>
+
+            {goalType === "trail" ? (
+              <>
+                <Field
+                  label={
+                    <>
+                      大会名 <span className="text-gray-400 font-normal">(任意)</span>
+                    </>
+                  }
+                >
+                  <Input
+                    type="text"
+                    value={raceName}
+                    onChange={(e) => setRaceName(e.target.value)}
+                    placeholder="例: ハセツネCUP"
+                  />
+                </Field>
+                <div className="flex gap-3">
+                  <Field label="距離 (km)" className="flex-1">
+                    <Input
+                      type="number"
+                      value={distanceStr}
+                      onChange={(e) => setDistanceStr(e.target.value)}
+                      min="1"
+                      step="0.1"
+                      required
+                      placeholder="30"
+                    />
+                  </Field>
+                  <Field
+                    label={
+                      <>
+                        累積標高 (m) <span className="text-gray-400 font-normal">(任意)</span>
+                      </>
+                    }
+                    className="flex-1"
+                  >
+                    <Input
+                      type="number"
+                      value={elevationStr}
+                      onChange={(e) => setElevationStr(e.target.value)}
+                      min="0"
+                      placeholder="1500"
+                    />
+                  </Field>
+                </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    目標タイム{" "}
-                    <span className="text-gray-400 font-normal">(H:MM:SS)</span>
-                  </label>
-                  <input
+                  <p className="block text-sm font-medium text-gray-700 mb-2">目標</p>
+                  <div className="flex gap-3">
+                    {(
+                      [
+                        { value: "finish", label: "完走（関門内）" },
+                        { value: "time", label: "目標タイム" },
+                      ] as const
+                    ).map((opt) => (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => setTrailTargetType(opt.value)}
+                        className={segClass(trailTargetType === opt.value)}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-gray-500 mt-2">
+                    トレランはコースごとに条件が違うため、初挑戦の大会は「完走」目標がおすすめです
+                  </p>
+                </div>
+                {trailTargetType === "time" && (
+                  <Field
+                    label={
+                      <>
+                        目標タイム{" "}
+                        <span className="text-gray-400 font-normal">(H:MM:SS)</span>
+                      </>
+                    }
+                  >
+                    <Input
+                      type="text"
+                      value={targetTimeStr}
+                      onChange={(e) => setTargetTimeStr(e.target.value)}
+                      placeholder="5:30:00"
+                      required
+                    />
+                  </Field>
+                )}
+              </>
+            ) : (
+              <>
+                <Field
+                  label={
+                    <>
+                      現在のタイム{" "}
+                      <span className="text-gray-400 font-normal">(H:MM:SS または MM:SS)</span>
+                    </>
+                  }
+                >
+                  <Input
+                    type="text"
+                    value={currentTimeStr}
+                    onChange={(e) => setCurrentTimeStr(e.target.value)}
+                    placeholder={marathonType === "full" ? "4:30:00" : "2:10:00"}
+                    required
+                  />
+                </Field>
+                <Field
+                  label={
+                    <>
+                      目標タイム{" "}
+                      <span className="text-gray-400 font-normal">(H:MM:SS または MM:SS)</span>
+                    </>
+                  }
+                >
+                  <Input
                     type="text"
                     value={targetTimeStr}
                     onChange={(e) => setTargetTimeStr(e.target.value)}
-                    placeholder="5:30:00"
+                    placeholder={marathonType === "full" ? "3:30:00" : "1:45:00"}
                     required
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
                   />
-                </div>
-              )}
-            </>
-          ) : (
-            <>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  現在のタイム{" "}
-                  <span className="text-gray-400 font-normal">(H:MM:SS または MM:SS)</span>
-                </label>
-                <input
-                  type="text"
-                  value={currentTimeStr}
-                  onChange={(e) => setCurrentTimeStr(e.target.value)}
-                  placeholder={marathonType === "full" ? "4:30:00" : "2:10:00"}
-                  required
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  目標タイム{" "}
-                  <span className="text-gray-400 font-normal">(H:MM:SS または MM:SS)</span>
-                </label>
-                <input
-                  type="text"
-                  value={targetTimeStr}
-                  onChange={(e) => setTargetTimeStr(e.target.value)}
-                  placeholder={marathonType === "full" ? "3:30:00" : "1:45:00"}
-                  required
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
-                />
-              </div>
-            </>
-          )}
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              {goalType === "trail" ? "大会開催日（目標日）" : "目標達成時期"}
-            </label>
-            <input
-              type="date"
-              value={targetDate}
-              onChange={(e) => setTargetDate(e.target.value)}
-              required
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
-            />
-          </div>
-          <div className="flex gap-3">
-            {goals.length > 0 && (
-              <button
-                type="button"
-                onClick={closeForm}
-                className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg py-3 font-semibold transition-colors"
-              >
-                キャンセル
-              </button>
+                </Field>
+              </>
             )}
-            <button
-              type="submit"
-              disabled={saving}
-              className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white rounded-lg py-3 font-semibold transition-colors"
-            >
-              {saving ? "保存中..." : editingId ? "更新する" : "保存する"}
-            </button>
-          </div>
-        </form>
+
+            <Field label={goalType === "trail" ? "大会開催日（目標日）" : "目標達成時期"}>
+              <Input
+                type="date"
+                value={targetDate}
+                onChange={(e) => setTargetDate(e.target.value)}
+                required
+              />
+            </Field>
+            <div className="flex gap-3">
+              {goals.length > 0 && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="lg"
+                  className="flex-1"
+                  onClick={closeForm}
+                >
+                  キャンセル
+                </Button>
+              )}
+              <Button type="submit" loading={saving} size="lg" className="flex-1">
+                {saving ? "保存中..." : editingId ? "更新する" : "保存する"}
+              </Button>
+            </div>
+          </form>
+        </Card>
       )}
 
       {deleteTarget && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center px-4 z-50">
-          <div className="bg-white rounded-xl p-5 max-w-sm w-full">
-            <p className="font-semibold text-gray-800 mb-2">目標を削除しますか？</p>
-            <p className="text-sm text-gray-600 mb-4">
-              {goalLabel(deleteTarget)} の目標を削除します。この操作は元に戻せません。
-            </p>
-            <div className="flex gap-3">
-              <button
-                onClick={() => setDeleteTarget(null)}
-                className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg py-2 font-medium transition-colors"
-              >
-                キャンセル
-              </button>
-              <button
-                onClick={handleDelete}
-                className="flex-1 bg-red-600 hover:bg-red-700 text-white rounded-lg py-2 font-medium transition-colors"
-              >
-                削除する
-              </button>
-            </div>
+        <Modal
+          onClose={() => setDeleteTarget(null)}
+          closeOnBackdrop={false}
+          className="max-w-sm"
+          title="目標を削除しますか？"
+        >
+          <p className="text-sm text-gray-600 mb-4">
+            {goalLabel(deleteTarget)} の目標を削除します。この操作は元に戻せません。
+          </p>
+          <div className="flex gap-3">
+            <Button
+              variant="secondary"
+              className="flex-1"
+              onClick={() => setDeleteTarget(null)}
+            >
+              キャンセル
+            </Button>
+            <Button variant="danger" className="flex-1" onClick={handleDelete}>
+              削除する
+            </Button>
           </div>
-        </div>
+        </Modal>
       )}
     </div>
   );

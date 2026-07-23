@@ -1,11 +1,22 @@
 import { useState, useRef } from "react";
+import { Plus, Camera, Footprints } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
 import { useTrainings } from "../hooks/useTrainings";
 import { httpsCallable } from "firebase/functions";
 import { functions } from "../firebase";
 import { Training, TrainingType, TRAINING_TYPE_OPTIONS, formatTime, parseTimeToSec } from "../types";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import {
+  Card,
+  Field,
+  Input,
+  Select,
+  Button,
+  Modal,
+  Spinner,
+  EmptyState,
+  controlClass,
+} from "../components/ui";
+import { Markdown } from "../components/Markdown";
 
 interface ParseResult {
   distanceKm?: number;
@@ -165,144 +176,128 @@ export function TrainingLog() {
   return (
     <div>
       <div className="flex items-center justify-between mb-5">
-        <h2 className="text-xl font-bold text-gray-800">トレーニングログ</h2>
-        <button
+        <h2 className="text-xl font-bold text-gray-900">トレーニングログ</h2>
+        <Button
+          size="sm"
+          variant={showForm ? "secondary" : "primary"}
           onClick={showForm ? closeForm : openNew}
-          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
         >
-          {showForm ? "キャンセル" : "+ 追加"}
-        </button>
+          {showForm ? (
+            "キャンセル"
+          ) : (
+            <>
+              <Plus className="w-4 h-4" />
+              追加
+            </>
+          )}
+        </Button>
       </div>
 
       {showForm && (
-        <form onSubmit={handleSubmit} className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 mb-5 space-y-3">
-          <p className="text-sm font-semibold text-gray-700">
-            {editingId ? "トレーニングを編集" : "新しいトレーニングを記録"}
-          </p>
+        <Card padding="md" className="mb-5">
+          <form onSubmit={handleSubmit} className="space-y-3">
+            <p className="text-sm font-semibold text-gray-700">
+              {editingId ? "トレーニングを編集" : "新しいトレーニングを記録"}
+            </p>
 
-          {!editingId && (
-            <div className="border-2 border-dashed border-gray-200 rounded-lg p-4 text-center">
-              <p className="text-xs text-gray-500 mb-2">ランニングウォッチの画像から自動入力</p>
-              <button
-                type="button"
-                onClick={() => fileRef.current?.click()}
-                disabled={imageUploading}
-                className="text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-2 rounded-lg transition-colors"
-              >
-                {imageUploading ? "解析中..." : "📷 画像をアップロード"}
-              </button>
-              <input
-                ref={fileRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(e) => e.target.files?.[0] && handleImageUpload(e.target.files[0])}
-              />
-            </div>
-          )}
-
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">日付</label>
-            <input
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              required
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">種類</label>
-            <select
-              value={type}
-              onChange={(e) => setType(e.target.value as TrainingType)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
-            >
-              {TRAINING_TYPE_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.emoji} {o.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {!isRestType(type) && (
-            <>
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">距離 (km)</label>
+            {!editingId && (
+              <div className="border-2 border-dashed border-gray-200 rounded-xl p-4 text-center">
+                <p className="text-xs text-gray-500 mb-2">ランニングウォッチの画像から自動入力</p>
+                <button
+                  type="button"
+                  onClick={() => fileRef.current?.click()}
+                  disabled={imageUploading}
+                  className="inline-flex items-center gap-2 text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-2 rounded-lg transition-colors disabled:opacity-60"
+                >
+                  <Camera className="w-4 h-4" />
+                  {imageUploading ? "解析中..." : "画像をアップロード"}
+                </button>
                 <input
-                  type="number"
-                  value={distance}
-                  onChange={(e) => setDistance(e.target.value)}
-                  step="0.01"
-                  required
-                  placeholder="10.5"
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  ref={fileRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => e.target.files?.[0] && handleImageUpload(e.target.files[0])}
                 />
               </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">タイム (H:MM:SS)</label>
-                <input
-                  type="text"
-                  value={duration}
-                  onChange={(e) => setDuration(e.target.value)}
-                  required
-                  placeholder="1:00:00"
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">
-                  平均ペース (MM:SS/km) — 空欄で自動計算
-                </label>
-                <input
-                  type="text"
-                  value={pace}
-                  onChange={(e) => setPace(e.target.value)}
-                  placeholder="5:42"
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
-                />
-              </div>
-              {type === "trail" && (
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">累積標高 (m)</label>
-                  <input
+            )}
+
+            <Field label="日付">
+              <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
+            </Field>
+            <Field label="種類">
+              <Select value={type} onChange={(e) => setType(e.target.value as TrainingType)}>
+                {TRAINING_TYPE_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.emoji} {o.label}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+
+            {!isRestType(type) && (
+              <>
+                <Field label="距離 (km)">
+                  <Input
                     type="number"
-                    value={elevationGain}
-                    onChange={(e) => setElevationGain(e.target.value)}
-                    min="0"
-                    placeholder="850"
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                    value={distance}
+                    onChange={(e) => setDistance(e.target.value)}
+                    step="0.01"
+                    required
+                    placeholder="10.5"
                   />
-                </div>
-              )}
-            </>
-          )}
+                </Field>
+                <Field label="タイム (H:MM:SS)">
+                  <Input
+                    type="text"
+                    value={duration}
+                    onChange={(e) => setDuration(e.target.value)}
+                    required
+                    placeholder="1:00:00"
+                  />
+                </Field>
+                <Field label="平均ペース (MM:SS/km) — 空欄で自動計算">
+                  <Input
+                    type="text"
+                    value={pace}
+                    onChange={(e) => setPace(e.target.value)}
+                    placeholder="5:42"
+                  />
+                </Field>
+                {type === "trail" && (
+                  <Field label="累積標高 (m)">
+                    <Input
+                      type="number"
+                      value={elevationGain}
+                      onChange={(e) => setElevationGain(e.target.value)}
+                      min="0"
+                      placeholder="850"
+                    />
+                  </Field>
+                )}
+              </>
+            )}
 
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">メモ</label>
-            <textarea
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              rows={2}
-              placeholder="体調、コース、インターバルの本数など"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
-            />
-          </div>
-          <button
-            type="submit"
-            disabled={saving}
-            className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white rounded-lg py-2 text-sm font-semibold transition-colors"
-          >
-            {saving ? "保存中..." : editingId ? "更新する" : "記録する"}
-          </button>
-        </form>
+            <Field label="メモ">
+              <textarea
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                rows={2}
+                placeholder="体調、コース、インターバルの本数など"
+                className={controlClass}
+              />
+            </Field>
+            <Button type="submit" loading={saving} className="w-full">
+              {saving ? "保存中..." : editingId ? "更新する" : "記録する"}
+            </Button>
+          </form>
+        </Card>
       )}
 
       {loading ? (
-        <p className="text-center text-gray-400 py-10">読み込み中...</p>
+        <EmptyState message="読み込み中..." />
       ) : trainings.length === 0 ? (
-        <p className="text-center text-gray-400 py-10">トレーニングの記録がまだありません</p>
+        <EmptyState message="トレーニングの記録がまだありません" />
       ) : (
         <ul className="space-y-3">
           {trainings.map((t) => (
@@ -337,42 +332,28 @@ function FeedbackModal({
   onClose: () => void;
 }) {
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-      onClick={onClose}
+    <Modal
+      onClose={onClose}
+      title={
+        <span className="flex items-center gap-2">
+          <Footprints className="w-5 h-5 text-primary-600" />
+          コーチからの一言
+        </span>
+      }
     >
-      <div
-        className="bg-white rounded-2xl shadow-xl w-full max-w-md p-5"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center gap-2 mb-3">
-          <span className="text-xl">🏃</span>
-          <h3 className="font-bold text-gray-800">コーチからの一言</h3>
+      {loading ? (
+        <div className="flex items-center gap-2 text-gray-500 py-6 justify-center">
+          <Spinner />
+          AIが今回のトレーニングを確認しています...
         </div>
+      ) : (
+        <Markdown compact>{feedback}</Markdown>
+      )}
 
-        {loading ? (
-          <div className="flex items-center gap-2 text-gray-500 py-6 justify-center">
-            <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-            </svg>
-            AIが今回のトレーニングを確認しています...
-          </div>
-        ) : (
-          <div className="prose prose-sm max-w-none prose-p:text-gray-700 prose-p:leading-relaxed prose-strong:text-gray-900">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{feedback}</ReactMarkdown>
-          </div>
-        )}
-
-        <button
-          onClick={onClose}
-          disabled={loading}
-          className="w-full mt-4 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white rounded-lg py-2 text-sm font-semibold transition-colors"
-        >
-          閉じる
-        </button>
-      </div>
-    </div>
+      <Button onClick={onClose} disabled={loading} size="sm" className="w-full mt-4">
+        閉じる
+      </Button>
+    </Modal>
   );
 }
 
@@ -388,15 +369,15 @@ function TrainingCard({
   const info = typeInfo[t.type] ?? { label: t.type, emoji: "🏃" };
   const isRest = isRestType(t.type);
   return (
-    <li className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+    <Card as="li">
       <div className="flex justify-between items-start">
         <div className="flex-1 min-w-0">
           <p className="text-xs text-gray-500">{t.date}</p>
-          <p className="font-semibold text-gray-800 mt-0.5">
+          <p className="font-semibold text-gray-900 mt-0.5">
             {info.emoji} {info.label}
           </p>
           {!isRest && (
-            <div className="flex gap-3 text-sm text-gray-600 mt-1 flex-wrap">
+            <div className="flex gap-3 text-sm text-gray-600 mt-1 flex-wrap tabular-nums">
               <span>{t.distanceKm} km</span>
               <span>{formatTime(t.durationSec)}</span>
               <span className="text-gray-400">{formatTime(t.avgPaceSecPerKm)}/km</span>
@@ -405,21 +386,21 @@ function TrainingCard({
           )}
           {t.notes && <p className="text-xs text-gray-400 mt-1 break-words">{t.notes}</p>}
         </div>
-        <div className="flex gap-2 ml-2 shrink-0">
+        <div className="flex gap-1 ml-2 shrink-0">
           <button
             onClick={onEdit}
-            className="text-blue-500 hover:text-blue-700 text-xs px-2 py-1 rounded hover:bg-blue-50 transition-colors"
+            className="text-primary-600 hover:text-primary-800 text-xs px-2 py-1 rounded hover:bg-primary-50 transition-colors"
           >
             編集
           </button>
           <button
             onClick={onDelete}
-            className="text-red-400 hover:text-red-600 text-xs px-2 py-1 rounded hover:bg-red-50 transition-colors"
+            className="text-red-500 hover:text-red-700 text-xs px-2 py-1 rounded hover:bg-red-50 transition-colors"
           >
             削除
           </button>
         </div>
       </div>
-    </li>
+    </Card>
   );
 }

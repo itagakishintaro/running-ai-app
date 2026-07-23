@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useAuth } from "../hooks/useAuth";
 import { useProfile } from "../hooks/useProfile";
 import { Gender, calcAge, PREFECTURES } from "../types";
+import { Card, Field, Input, Select, Button, EmptyState } from "../components/ui";
 
 export function Profile() {
   const { user } = useAuth();
@@ -46,105 +47,87 @@ export function Profile() {
     setTimeout(() => setSaved(false), 2000);
   };
 
-  if (loading) return <p className="text-center text-gray-400 py-10">読み込み中...</p>;
+  if (loading) return <EmptyState message="読み込み中..." />;
 
   return (
     <div>
-      <h2 className="text-xl font-bold text-gray-800 mb-5">プロフィール</h2>
-      <form onSubmit={handleSubmit} className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 space-y-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">名前</label>
-          <input
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            required
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">生年月日</label>
-          <input
-            type="date"
-            value={birthDate}
-            onChange={(e) => setBirthDate(e.target.value)}
-            required
-            max={new Date().toISOString().slice(0, 10)}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
-          />
-          {birthDate && (
-            <p className="text-xs text-gray-500 mt-1">現在の年齢: {calcAge(birthDate)}歳</p>
-          )}
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">性別</label>
-          <select
-            value={gender}
-            onChange={(e) => setGender(e.target.value as Gender)}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+      <h2 className="text-xl font-bold text-gray-900 mb-5">プロフィール</h2>
+      <Card padding="md">
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <Field label="名前">
+            <Input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+            />
+          </Field>
+          <Field
+            label="生年月日"
+            hint={birthDate ? `現在の年齢: ${calcAge(birthDate)}歳` : undefined}
           >
-            <option value="male">男性</option>
-            <option value="female">女性</option>
-            <option value="other">その他</option>
-          </select>
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">身長 (cm)</label>
-          <input
-            type="number"
-            value={height}
-            onChange={(e) => setHeight(e.target.value)}
-            required
-            min={100}
-            max={250}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">体重 (kg)</label>
-          <input
-            type="number"
-            value={weight}
-            onChange={(e) => setWeight(e.target.value)}
-            required
-            min={30}
-            max={200}
-            step="0.1"
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">居住地（都道府県）</label>
-          <select
-            value={prefecture}
-            onChange={(e) => setPrefecture(e.target.value)}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+            <Input
+              type="date"
+              value={birthDate}
+              onChange={(e) => setBirthDate(e.target.value)}
+              required
+              max={new Date().toISOString().slice(0, 10)}
+            />
+          </Field>
+          <Field label="性別">
+            <Select value={gender} onChange={(e) => setGender(e.target.value as Gender)}>
+              <option value="male">男性</option>
+              <option value="female">女性</option>
+              <option value="other">その他</option>
+            </Select>
+          </Field>
+          <Field label="身長 (cm)">
+            <Input
+              type="number"
+              value={height}
+              onChange={(e) => setHeight(e.target.value)}
+              required
+              min={100}
+              max={250}
+            />
+          </Field>
+          <Field label="体重 (kg)">
+            <Input
+              type="number"
+              value={weight}
+              onChange={(e) => setWeight(e.target.value)}
+              required
+              min={30}
+              max={200}
+              step="0.1"
+            />
+          </Field>
+          <Field
+            label="居住地（都道府県）"
+            hint="近場のマラソン大会を探すときに使います"
           >
-            <option value="">未選択</option>
-            {PREFECTURES.map((p) => (
-              <option key={p} value={p}>{p}</option>
-            ))}
-          </select>
-          <p className="text-xs text-gray-500 mt-1">近場のマラソン大会を探すときに使います</p>
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">市区町村（任意）</label>
-          <input
-            type="text"
-            value={city}
-            onChange={(e) => setCity(e.target.value)}
-            placeholder="例: 渋谷区"
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
-          />
-        </div>
-        <button
-          type="submit"
-          disabled={saving}
-          className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white rounded-lg py-3 font-semibold transition-colors"
-        >
-          {saving ? "保存中..." : saved ? "✓ 保存しました" : "保存する"}
-        </button>
-      </form>
+            <Select value={prefecture} onChange={(e) => setPrefecture(e.target.value)}>
+              <option value="">未選択</option>
+              {PREFECTURES.map((p) => (
+                <option key={p} value={p}>
+                  {p}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="市区町村（任意）">
+            <Input
+              type="text"
+              value={city}
+              onChange={(e) => setCity(e.target.value)}
+              placeholder="例: 渋谷区"
+            />
+          </Field>
+          <Button type="submit" loading={saving} size="lg" className="w-full">
+            {saving ? "保存中..." : saved ? "✓ 保存しました" : "保存する"}
+          </Button>
+        </form>
+      </Card>
     </div>
   );
 }
