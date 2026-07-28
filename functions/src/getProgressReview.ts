@@ -1,5 +1,6 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { defineSecret } from "firebase-functions/params";
+import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
 import Anthropic from "@anthropic-ai/sdk";
 import { describeGoal, GoalDoc } from "./goalLabel";
@@ -77,7 +78,9 @@ interface WeekAgg {
 }
 
 export const getProgressReview = onCall(
-  { secrets: [anthropicApiKey], region: "asia-northeast1" },
+  // max_tokens拡大に伴いClaudeの生成が60秒(デフォルト)を超えることがあるため延長。
+  // クライアント側(httpsCallableのtimeoutオプション)も合わせて延長すること。
+  { secrets: [anthropicApiKey], region: "asia-northeast1", timeoutSeconds: 300 },
   async (request) => {
     const { userId, physicalCondition, motivation, freeNote } = request.data as {
       userId: string;
@@ -275,7 +278,8 @@ ${subjectiveSummary}
 
     const response = await client.messages.create({
       model: "claude-sonnet-4-6",
-      max_tokens: 2048,
+      // 3見出し構成の長文Markdownを返すため、getTrainingAdviceと同様に途切れ対策で余裕を持たせる
+      max_tokens: 8192,
       system:
         "あなたは経験豊富なプロのランニングコーチです。ユーザーのトレーニング実績・目標・主観報告を分析し、" +
         "目標達成に向けた進捗のふりかえりを行います。必ず以下の3つの見出し（Markdownの##）でこの順に出力してください。\n" +
@@ -283,11 +287,20 @@ ${subjectiveSummary}
         "## ふりかえり\nこの期間にできていること（継続・成長している点）と、課題・気になる点を挙げる。本人の主観報告（体調・故障・モチベーション）も必ず踏まえる。\n" +
         "## 今後のアドバイス\n残り期間にどう取り組むべきか、方針を具体的に示す。故障や体調不良の申告があれば回復を優先するなど、主観報告を反映する。\n" +
         "科学的根拠に基づき、励ましつつも率直に。日本語で、読みやすいMarkdownで答えてください。\n" +
+        // 出力トークン数が応答時間にほぼ比例するため、簡潔さを明示的に指示して生成時間を抑える
+        "出力は簡潔に: 各見出しは4〜6文程度にまとめ、全体で1200字程度に収めること。前置きの挨拶は不要。\n" +
         "注意事項:\n" +
         "- 記録があるのはトレーニングを行った日のみ。記録のない日は休養日と考えられるため、休養の記録がない・少ないことを「休養を取っていない」と解釈しないこと。\n" +
         "- 走行距離の平均や換算（週平均・月間など）は、ふりかえり対象期間の実際の長さに基づいて計算すること。対象期間より長い期間（年間など）への換算はしないこと。",
       messages: [{ role: "user", content: userMessage }],
     });
+
+    // max_tokens到達はエラーではなく正常レスポンスで返るため、明示的に検知する
+    if (response.stop_reason === "max_tokens") {
+      logger.warn("getProgressReview: response truncated by max_tokens", {
+        outputTokens: response.usage.output_tokens,
+      });
+    }
 
     const review = response.content[0].type === "text" ? response.content[0].text : "";
     return { review };

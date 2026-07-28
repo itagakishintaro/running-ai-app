@@ -1,5 +1,6 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { defineSecret } from "firebase-functions/params";
+import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
 import Anthropic from "@anthropic-ai/sdk";
 import { describeGoal, GoalDoc } from "./goalLabel";
@@ -44,7 +45,9 @@ function calcAge(birthDate: string): number {
 }
 
 export const getTrainingAdvice = onCall(
-  { secrets: [anthropicApiKey], region: "asia-northeast1" },
+  // max_tokens拡大に伴いClaudeの生成が60秒(デフォルト)を超えることがあるため延長。
+  // クライアント側(httpsCallableのtimeoutオプション)も合わせて延長すること。
+  { secrets: [anthropicApiKey], region: "asia-northeast1", timeoutSeconds: 300 },
   async (request) => {
     const { userId, startDate, endDate, restDays, condition } = request.data as {
       userId: string;
@@ -174,11 +177,27 @@ ${restDays && restDays.length > 0 ? `【トレーニングできない曜日】:
 
     const response = await client.messages.create({
       model: "claude-sonnet-4-6",
-      max_tokens: 2048,
+      // 日本語はほぼ1文字=1トークンのため、7日分の詳細メニューは2048では途切れる。
+      // 非ストリーミングで安全な範囲(〜16K)内で余裕を持たせる。
+      max_tokens: 8192,
+      // 出力トークン数が応答時間にほぼ比例するため、簡潔さを明示的に指示して生成時間を抑える
       system:
-        "あなたは経験豊富なプロのランニングコーチです。ユーザーのデータを分析し、科学的根拠に基づいた実践的なトレーニングメニューを提案します。フォーマットはMarkdownを使用し、読みやすく整理してください。",
+        "あなたは経験豊富なプロのランニングコーチです。ユーザーのデータを分析し、科学的根拠に基づいた実践的なトレーニングメニューを提案します。フォーマットはMarkdownを使用し、読みやすく整理してください。\n" +
+        "出力は簡潔にしてください:\n" +
+        "- 各日のメニューは「目的・内容（距離やペースの目安）」を2〜3行以内で書く\n" +
+        "- 前置きの挨拶や分析の長い説明は省き、メニュー本体から始める\n" +
+        "- 最後の総括・補足は3行以内\n" +
+        "- 全体で1500字程度に収める",
       messages: [{ role: "user", content: userMessage }],
     });
+
+    // max_tokens到達はエラーではなく正常レスポンスで返るため、明示的に検知する
+    if (response.stop_reason === "max_tokens") {
+      logger.warn("getTrainingAdvice: response truncated by max_tokens", {
+        userId,
+        outputTokens: response.usage.output_tokens,
+      });
+    }
 
     const advice = response.content[0].type === "text" ? response.content[0].text : "";
     // menuStart/menuEnd も返す。フィードバック機能（getTrainingFeedback）が

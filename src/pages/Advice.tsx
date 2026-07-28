@@ -60,7 +60,9 @@ export function Advice() {
     setLoading(true);
     setError("");
     try {
-      const fn = httpsCallable<{ userId: string; startDate: string; endDate: string; restDays: string[]; condition: string }, AdviceResult>(functions, "getTrainingAdvice");
+      // Claudeの生成に60秒以上かかることがあるため、SDKデフォルト(70秒)より長く設定。
+      // Functions側のtimeoutSeconds: 300と対応。
+      const fn = httpsCallable<{ userId: string; startDate: string; endDate: string; restDays: string[]; condition: string }, AdviceResult>(functions, "getTrainingAdvice", { timeout: 300_000 });
       const result = await fn({ userId: user.uid, startDate, endDate, restDays, condition });
       const newAdvice = result.data.advice;
       setAdvice(newAdvice);

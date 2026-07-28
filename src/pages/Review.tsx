@@ -54,7 +54,9 @@ export function Review() {
       const fn = httpsCallable<
         { userId: string; physicalCondition: string; motivation: string; freeNote: string },
         ReviewResult
-      >(functions, "getProgressReview");
+      // Claudeの生成に60秒以上かかることがあるため、SDKデフォルト(70秒)より長く設定。
+      // Functions側のtimeoutSeconds: 300と対応。
+      >(functions, "getProgressReview", { timeout: 300_000 });
       const result = await fn({ userId: user.uid, physicalCondition, motivation, freeNote });
       const newReview = result.data.review;
       setReview(newReview);
