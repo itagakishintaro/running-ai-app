@@ -49,6 +49,7 @@ export function TrainingLog() {
   const [elevationGain, setElevationGain] = useState("");
   const [notes, setNotes] = useState("");
   const [imageUploading, setImageUploading] = useState(false);
+  const [imageError, setImageError] = useState("");
   const [saving, setSaving] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -93,25 +94,34 @@ export function TrainingLog() {
 
   const handleImageUpload = async (file: File) => {
     setImageUploading(true);
+    setImageError("");
     try {
-      const reader = new FileReader();
-      reader.onload = async () => {
-        const base64 = (reader.result as string).split(",")[1];
-        const parse = httpsCallable<{ imageBase64: string; mimeType: string }, ParseResult>(
-          functions,
-          "parseTrainingImage"
-        );
-        const result = await parse({ imageBase64: base64, mimeType: file.type });
-        const data = result.data;
-        if (data.distanceKm) setDistance(String(data.distanceKm));
-        if (data.durationSec) setDuration(formatTime(data.durationSec));
-        if (data.avgPaceSecPerKm) setPace(formatTime(data.avgPaceSecPerKm));
-        if (data.elevationGainM) setElevationGain(String(data.elevationGainM));
-        if (data.notes) setNotes(data.notes);
-      };
-      reader.readAsDataURL(file);
+      // FileReaderのonloadはreadAsDataURL()のreturn後に非同期で発火するため、
+      // Promiseでラップしてawaitしないと、finallyが解析前に走りローディング表示が一瞬で消える
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve((reader.result as string).split(",")[1]);
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(file);
+      });
+      const parse = httpsCallable<{ imageBase64: string; mimeType: string }, ParseResult>(
+        functions,
+        "parseTrainingImage"
+      );
+      const result = await parse({ imageBase64: base64, mimeType: file.type });
+      const data = result.data;
+      if (data.distanceKm) setDistance(String(data.distanceKm));
+      if (data.durationSec) setDuration(formatTime(data.durationSec));
+      if (data.avgPaceSecPerKm) setPace(formatTime(data.avgPaceSecPerKm));
+      if (data.elevationGainM) setElevationGain(String(data.elevationGainM));
+      if (data.notes) setNotes(data.notes);
+    } catch (e) {
+      console.error("画像の解析に失敗しました", e);
+      setImageError("画像の解析に失敗しました。もう一度お試しください。");
     } finally {
       setImageUploading(false);
+      // 同じファイルを選び直しても onChange が発火するようリセット
+      if (fileRef.current) fileRef.current.value = "";
     }
   };
 
@@ -209,9 +219,19 @@ export function TrainingLog() {
                   disabled={imageUploading}
                   className="inline-flex items-center gap-2 text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-2 rounded-lg transition-colors disabled:opacity-60"
                 >
-                  <Camera className="w-4 h-4" />
-                  {imageUploading ? "解析中..." : "画像をアップロード"}
+                  {imageUploading ? (
+                    <>
+                      <Spinner size="sm" />
+                      AIが画像を解析中...
+                    </>
+                  ) : (
+                    <>
+                      <Camera className="w-4 h-4" />
+                      画像をアップロード
+                    </>
+                  )}
                 </button>
+                {imageError && <p className="text-xs text-red-500 mt-2">{imageError}</p>}
                 <input
                   ref={fileRef}
                   type="file"
