@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Timer } from "lucide-react";
-import { MarathonType, formatTime, parseTimeToSec } from "../types";
+import { MarathonType, formatTime } from "../types";
 import { Card, Field, Input, cn } from "../components/ui";
 
 const DISTANCE_KM: Record<MarathonType, number> = {
@@ -20,10 +20,16 @@ const segClass = (selected: boolean) =>
 
 export function PaceCalc() {
   const [marathonType, setMarathonType] = useState<MarathonType>("full");
-  const [timeStr, setTimeStr] = useState("");
+  const [hStr, setHStr] = useState("");
+  const [mStr, setMStr] = useState("");
+  const [sStr, setSStr] = useState("");
   const [unit, setUnit] = useState<PaceUnit>("perKm");
 
-  const totalSec = parseTimeToSec(timeStr);
+  // 空欄は0扱い。数字キーボードで入力できるよう桁ごとに分けて受け取る
+  const totalSec =
+    (parseInt(hStr, 10) || 0) * 3600 +
+    (parseInt(mStr, 10) || 0) * 60 +
+    (parseInt(sStr, 10) || 0);
   const distanceKm = DISTANCE_KM[marathonType];
   const valid = totalSec > 0;
 
@@ -57,17 +63,40 @@ export function PaceCalc() {
           </div>
         </Field>
 
-        <Field
-          label="目標タイム"
-          hint="時:分:秒 の形式で入力（例: 4:30:00）"
-        >
-          <Input
-            type="text"
-            inputMode="numeric"
-            value={timeStr}
-            onChange={(e) => setTimeStr(e.target.value)}
-            placeholder={marathonType === "full" ? "4:30:00" : "2:10:00"}
-          />
+        <Field label="目標タイム" hint="秒は省略できます">
+          <div className="flex items-center gap-1.5">
+            {(
+              [
+                {
+                  value: hStr,
+                  set: setHStr,
+                  suffix: "時間",
+                  placeholder: marathonType === "full" ? "4" : "2",
+                  max: 2,
+                },
+                {
+                  value: mStr,
+                  set: setMStr,
+                  suffix: "分",
+                  placeholder: marathonType === "full" ? "30" : "10",
+                  max: 2,
+                },
+                { value: sStr, set: setSStr, suffix: "秒", placeholder: "00", max: 2 },
+              ] as const
+            ).map(({ value, set, suffix, placeholder, max }) => (
+              <div key={suffix} className="flex items-center gap-1 flex-1">
+                <Input
+                  type="text"
+                  inputMode="numeric"
+                  value={value}
+                  onChange={(e) => set(e.target.value.replace(/\D/g, "").slice(0, max))}
+                  placeholder={placeholder}
+                  className="text-center tabular-nums"
+                />
+                <span className="text-sm text-gray-500 shrink-0">{suffix}</span>
+              </div>
+            ))}
+          </div>
         </Field>
       </Card>
 
