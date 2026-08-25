@@ -11,6 +11,7 @@ import { Races } from "./pages/Races";
 import { Review } from "./pages/Review";
 import { Stats } from "./pages/Stats";
 import { Settings } from "./pages/Settings";
+import { PaceCalc } from "./pages/PaceCalc";
 
 function App() {
   const { user, loading } = useAuth();
@@ -38,6 +39,7 @@ function App() {
           <Route path="/review" element={<Review />} />
           <Route path="/stats" element={<Stats />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/pace" element={<PaceCalc />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Layout>

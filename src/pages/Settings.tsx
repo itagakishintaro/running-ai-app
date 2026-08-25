@@ -3,6 +3,7 @@ import {
   User as UserIcon,
   Target,
   TrendingUp,
+  Timer,
   ChevronRight,
   LogOut,
   type LucideIcon,
@@ -33,6 +34,12 @@ const settingsItems: {
     icon: TrendingUp,
     label: "ふりかえり",
     description: "AIによるトレーニング進捗分析",
+  },
+  {
+    to: "/pace",
+    icon: Timer,
+    label: "ペース計算",
+    description: "目標タイムから必要ペースを計算",
   },
 ];
 

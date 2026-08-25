@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Sparkles, Medal, AlertTriangle, Mountain, ArrowRight } from "lucide-react";
+import { Sparkles, Medal, AlertTriangle, Mountain, ArrowRight, Timer } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
 import { useProfile } from "../hooks/useProfile";
 import { useGoals } from "../hooks/useGoals";
@@ -135,6 +135,14 @@ export function Dashboard() {
       >
         <Medal className="w-5 h-5 text-primary-600" />
         出場するマラソン大会を探す
+      </Link>
+
+      <Link
+        to="/pace"
+        className="flex items-center justify-center gap-2 w-full bg-white hover:bg-gray-50 text-gray-800 border border-gray-200 text-center rounded-xl py-3.5 font-semibold transition-colors"
+      >
+        <Timer className="w-5 h-5 text-primary-600" />
+        目標タイムからペースを計算する
       </Link>
 
       {recentTrainings.length > 0 && (
